@@ -1,4 +1,4 @@
-import { DeviceID, newUserRole, Trophy, UserID, UserRole, UserState } from "./models";
+import { newUserRole, UserRole } from "./models";
 
 export const roles = {
     /** Consider using isTeacher() for comparison */
