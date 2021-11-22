@@ -1,4 +1,4 @@
-import { newUserRole, UserState } from "./models";
+import { DeviceID, newUserRole, Trophy, UserID, UserRole, UserState } from "./models";
 
 export const roles = {
     /** Consider using isTeacher() for comparison */
@@ -7,10 +7,10 @@ export const roles = {
     Student: newUserRole("student"),
 }
 
-export function isTeacher({ role }: UserState) {
+export function isTeacher({role}: {role: UserRole}) {
     return role === roles.Teacher
 }
 
-export function isStudent({ role }: UserState) {
+export function isStudent({role}: {role: UserRole}) {
     return role === roles.Student
 }

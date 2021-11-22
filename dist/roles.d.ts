@@ -1,10 +1,14 @@
-import { UserState } from "./models";
+import { UserRole } from "./models";
 export declare const roles: {
     /** Consider using isTeacher() for comparison */
-    Teacher: import("./models").UserRole;
+    Teacher: UserRole;
     /** Consider using isStudent() for comparison */
-    Student: import("./models").UserRole;
+    Student: UserRole;
 };
-export declare function isTeacher({ role }: UserState): boolean;
-export declare function isStudent({ role }: UserState): boolean;
+export declare function isTeacher({ role }: {
+    role: UserRole;
+}): boolean;
+export declare function isStudent({ role }: {
+    role: UserRole;
+}): boolean;
 //# sourceMappingURL=roles.d.ts.map
