@@ -1934,8 +1934,8 @@ $root.RewardTrophyToUserCommand = (function() {
      * Properties of a RewardTrophyToUserCommand.
      * @exports IRewardTrophyToUserCommand
      * @interface IRewardTrophyToUserCommand
-     * @property {string|null} [userId] RewardTrophyToUserCommand userId
-     * @property {ITrophy|null} [trophy] RewardTrophyToUserCommand trophy
+     * @property {string|null} [trophyType] RewardTrophyToUserCommand trophyType
+     * @property {string|null} [toUserId] RewardTrophyToUserCommand toUserId
      */
 
     /**
@@ -1954,20 +1954,20 @@ $root.RewardTrophyToUserCommand = (function() {
     }
 
     /**
-     * RewardTrophyToUserCommand userId.
-     * @member {string} userId
+     * RewardTrophyToUserCommand trophyType.
+     * @member {string} trophyType
      * @memberof RewardTrophyToUserCommand
      * @instance
      */
-    RewardTrophyToUserCommand.prototype.userId = "";
+    RewardTrophyToUserCommand.prototype.trophyType = "";
 
     /**
-     * RewardTrophyToUserCommand trophy.
-     * @member {ITrophy|null|undefined} trophy
+     * RewardTrophyToUserCommand toUserId.
+     * @member {string} toUserId
      * @memberof RewardTrophyToUserCommand
      * @instance
      */
-    RewardTrophyToUserCommand.prototype.trophy = null;
+    RewardTrophyToUserCommand.prototype.toUserId = "";
 
     /**
      * Creates a new RewardTrophyToUserCommand instance using the specified properties.
@@ -1993,10 +1993,10 @@ $root.RewardTrophyToUserCommand = (function() {
     RewardTrophyToUserCommand.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.userId != null && Object.hasOwnProperty.call(message, "userId"))
-            writer.uint32(/* id 1, wireType 2 =*/10).string(message.userId);
-        if (message.trophy != null && Object.hasOwnProperty.call(message, "trophy"))
-            $root.Trophy.encode(message.trophy, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.trophyType != null && Object.hasOwnProperty.call(message, "trophyType"))
+            writer.uint32(/* id 1, wireType 2 =*/10).string(message.trophyType);
+        if (message.toUserId != null && Object.hasOwnProperty.call(message, "toUserId"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.toUserId);
         return writer;
     };
 
@@ -2032,10 +2032,10 @@ $root.RewardTrophyToUserCommand = (function() {
             var tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.userId = reader.string();
+                message.trophyType = reader.string();
                 break;
             case 2:
-                message.trophy = $root.Trophy.decode(reader, reader.uint32());
+                message.toUserId = reader.string();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -2072,14 +2072,12 @@ $root.RewardTrophyToUserCommand = (function() {
     RewardTrophyToUserCommand.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.userId != null && message.hasOwnProperty("userId"))
-            if (!$util.isString(message.userId))
-                return "userId: string expected";
-        if (message.trophy != null && message.hasOwnProperty("trophy")) {
-            var error = $root.Trophy.verify(message.trophy);
-            if (error)
-                return "trophy." + error;
-        }
+        if (message.trophyType != null && message.hasOwnProperty("trophyType"))
+            if (!$util.isString(message.trophyType))
+                return "trophyType: string expected";
+        if (message.toUserId != null && message.hasOwnProperty("toUserId"))
+            if (!$util.isString(message.toUserId))
+                return "toUserId: string expected";
         return null;
     };
 
@@ -2095,13 +2093,10 @@ $root.RewardTrophyToUserCommand = (function() {
         if (object instanceof $root.RewardTrophyToUserCommand)
             return object;
         var message = new $root.RewardTrophyToUserCommand();
-        if (object.userId != null)
-            message.userId = String(object.userId);
-        if (object.trophy != null) {
-            if (typeof object.trophy !== "object")
-                throw TypeError(".RewardTrophyToUserCommand.trophy: object expected");
-            message.trophy = $root.Trophy.fromObject(object.trophy);
-        }
+        if (object.trophyType != null)
+            message.trophyType = String(object.trophyType);
+        if (object.toUserId != null)
+            message.toUserId = String(object.toUserId);
         return message;
     };
 
@@ -2119,13 +2114,13 @@ $root.RewardTrophyToUserCommand = (function() {
             options = {};
         var object = {};
         if (options.defaults) {
-            object.userId = "";
-            object.trophy = null;
+            object.trophyType = "";
+            object.toUserId = "";
         }
-        if (message.userId != null && message.hasOwnProperty("userId"))
-            object.userId = message.userId;
-        if (message.trophy != null && message.hasOwnProperty("trophy"))
-            object.trophy = $root.Trophy.toObject(message.trophy, options);
+        if (message.trophyType != null && message.hasOwnProperty("trophyType"))
+            object.trophyType = message.trophyType;
+        if (message.toUserId != null && message.hasOwnProperty("toUserId"))
+            object.toUserId = message.toUserId;
         return object;
     };
 
@@ -2149,7 +2144,7 @@ $root.RewardTrophyToAllCommand = (function() {
      * Properties of a RewardTrophyToAllCommand.
      * @exports IRewardTrophyToAllCommand
      * @interface IRewardTrophyToAllCommand
-     * @property {ITrophy|null} [trophy] RewardTrophyToAllCommand trophy
+     * @property {string|null} [trophyType] RewardTrophyToAllCommand trophyType
      */
 
     /**
@@ -2168,12 +2163,12 @@ $root.RewardTrophyToAllCommand = (function() {
     }
 
     /**
-     * RewardTrophyToAllCommand trophy.
-     * @member {ITrophy|null|undefined} trophy
+     * RewardTrophyToAllCommand trophyType.
+     * @member {string} trophyType
      * @memberof RewardTrophyToAllCommand
      * @instance
      */
-    RewardTrophyToAllCommand.prototype.trophy = null;
+    RewardTrophyToAllCommand.prototype.trophyType = "";
 
     /**
      * Creates a new RewardTrophyToAllCommand instance using the specified properties.
@@ -2199,8 +2194,8 @@ $root.RewardTrophyToAllCommand = (function() {
     RewardTrophyToAllCommand.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.trophy != null && Object.hasOwnProperty.call(message, "trophy"))
-            $root.Trophy.encode(message.trophy, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.trophyType != null && Object.hasOwnProperty.call(message, "trophyType"))
+            writer.uint32(/* id 1, wireType 2 =*/10).string(message.trophyType);
         return writer;
     };
 
@@ -2236,7 +2231,7 @@ $root.RewardTrophyToAllCommand = (function() {
             var tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.trophy = $root.Trophy.decode(reader, reader.uint32());
+                message.trophyType = reader.string();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -2273,11 +2268,9 @@ $root.RewardTrophyToAllCommand = (function() {
     RewardTrophyToAllCommand.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.trophy != null && message.hasOwnProperty("trophy")) {
-            var error = $root.Trophy.verify(message.trophy);
-            if (error)
-                return "trophy." + error;
-        }
+        if (message.trophyType != null && message.hasOwnProperty("trophyType"))
+            if (!$util.isString(message.trophyType))
+                return "trophyType: string expected";
         return null;
     };
 
@@ -2293,11 +2286,8 @@ $root.RewardTrophyToAllCommand = (function() {
         if (object instanceof $root.RewardTrophyToAllCommand)
             return object;
         var message = new $root.RewardTrophyToAllCommand();
-        if (object.trophy != null) {
-            if (typeof object.trophy !== "object")
-                throw TypeError(".RewardTrophyToAllCommand.trophy: object expected");
-            message.trophy = $root.Trophy.fromObject(object.trophy);
-        }
+        if (object.trophyType != null)
+            message.trophyType = String(object.trophyType);
         return message;
     };
 
@@ -2315,9 +2305,9 @@ $root.RewardTrophyToAllCommand = (function() {
             options = {};
         var object = {};
         if (options.defaults)
-            object.trophy = null;
-        if (message.trophy != null && message.hasOwnProperty("trophy"))
-            object.trophy = $root.Trophy.toObject(message.trophy, options);
+            object.trophyType = "";
+        if (message.trophyType != null && message.hasOwnProperty("trophyType"))
+            object.trophyType = message.trophyType;
         return object;
     };
 
@@ -3957,8 +3947,8 @@ $root.TrophyRewardedToUserEvent = (function() {
      * Properties of a TrophyRewardedToUserEvent.
      * @exports ITrophyRewardedToUserEvent
      * @interface ITrophyRewardedToUserEvent
-     * @property {string|null} [userId] TrophyRewardedToUserEvent userId
      * @property {ITrophy|null} [trophy] TrophyRewardedToUserEvent trophy
+     * @property {string|null} [toUserId] TrophyRewardedToUserEvent toUserId
      */
 
     /**
@@ -3977,20 +3967,20 @@ $root.TrophyRewardedToUserEvent = (function() {
     }
 
     /**
-     * TrophyRewardedToUserEvent userId.
-     * @member {string} userId
-     * @memberof TrophyRewardedToUserEvent
-     * @instance
-     */
-    TrophyRewardedToUserEvent.prototype.userId = "";
-
-    /**
      * TrophyRewardedToUserEvent trophy.
      * @member {ITrophy|null|undefined} trophy
      * @memberof TrophyRewardedToUserEvent
      * @instance
      */
     TrophyRewardedToUserEvent.prototype.trophy = null;
+
+    /**
+     * TrophyRewardedToUserEvent toUserId.
+     * @member {string} toUserId
+     * @memberof TrophyRewardedToUserEvent
+     * @instance
+     */
+    TrophyRewardedToUserEvent.prototype.toUserId = "";
 
     /**
      * Creates a new TrophyRewardedToUserEvent instance using the specified properties.
@@ -4016,10 +4006,10 @@ $root.TrophyRewardedToUserEvent = (function() {
     TrophyRewardedToUserEvent.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.userId != null && Object.hasOwnProperty.call(message, "userId"))
-            writer.uint32(/* id 1, wireType 2 =*/10).string(message.userId);
         if (message.trophy != null && Object.hasOwnProperty.call(message, "trophy"))
-            $root.Trophy.encode(message.trophy, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            $root.Trophy.encode(message.trophy, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.toUserId != null && Object.hasOwnProperty.call(message, "toUserId"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.toUserId);
         return writer;
     };
 
@@ -4055,10 +4045,10 @@ $root.TrophyRewardedToUserEvent = (function() {
             var tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.userId = reader.string();
+                message.trophy = $root.Trophy.decode(reader, reader.uint32());
                 break;
             case 2:
-                message.trophy = $root.Trophy.decode(reader, reader.uint32());
+                message.toUserId = reader.string();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -4095,14 +4085,14 @@ $root.TrophyRewardedToUserEvent = (function() {
     TrophyRewardedToUserEvent.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.userId != null && message.hasOwnProperty("userId"))
-            if (!$util.isString(message.userId))
-                return "userId: string expected";
         if (message.trophy != null && message.hasOwnProperty("trophy")) {
             var error = $root.Trophy.verify(message.trophy);
             if (error)
                 return "trophy." + error;
         }
+        if (message.toUserId != null && message.hasOwnProperty("toUserId"))
+            if (!$util.isString(message.toUserId))
+                return "toUserId: string expected";
         return null;
     };
 
@@ -4118,13 +4108,13 @@ $root.TrophyRewardedToUserEvent = (function() {
         if (object instanceof $root.TrophyRewardedToUserEvent)
             return object;
         var message = new $root.TrophyRewardedToUserEvent();
-        if (object.userId != null)
-            message.userId = String(object.userId);
         if (object.trophy != null) {
             if (typeof object.trophy !== "object")
                 throw TypeError(".TrophyRewardedToUserEvent.trophy: object expected");
             message.trophy = $root.Trophy.fromObject(object.trophy);
         }
+        if (object.toUserId != null)
+            message.toUserId = String(object.toUserId);
         return message;
     };
 
@@ -4142,13 +4132,13 @@ $root.TrophyRewardedToUserEvent = (function() {
             options = {};
         var object = {};
         if (options.defaults) {
-            object.userId = "";
             object.trophy = null;
+            object.toUserId = "";
         }
-        if (message.userId != null && message.hasOwnProperty("userId"))
-            object.userId = message.userId;
         if (message.trophy != null && message.hasOwnProperty("trophy"))
             object.trophy = $root.Trophy.toObject(message.trophy, options);
+        if (message.toUserId != null && message.hasOwnProperty("toUserId"))
+            object.toUserId = message.toUserId;
         return object;
     };
 
@@ -5297,6 +5287,7 @@ $root.Trophy = (function() {
      * @interface ITrophy
      * @property {number|Long|null} [timestamp] Trophy timestamp
      * @property {string|null} [type] Trophy type
+     * @property {string|null} [fromUserId] Trophy fromUserId
      */
 
     /**
@@ -5331,6 +5322,14 @@ $root.Trophy = (function() {
     Trophy.prototype.type = "";
 
     /**
+     * Trophy fromUserId.
+     * @member {string} fromUserId
+     * @memberof Trophy
+     * @instance
+     */
+    Trophy.prototype.fromUserId = "";
+
+    /**
      * Creates a new Trophy instance using the specified properties.
      * @function create
      * @memberof Trophy
@@ -5358,6 +5357,8 @@ $root.Trophy = (function() {
             writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.timestamp);
         if (message.type != null && Object.hasOwnProperty.call(message, "type"))
             writer.uint32(/* id 2, wireType 2 =*/18).string(message.type);
+        if (message.fromUserId != null && Object.hasOwnProperty.call(message, "fromUserId"))
+            writer.uint32(/* id 3, wireType 2 =*/26).string(message.fromUserId);
         return writer;
     };
 
@@ -5397,6 +5398,9 @@ $root.Trophy = (function() {
                 break;
             case 2:
                 message.type = reader.string();
+                break;
+            case 3:
+                message.fromUserId = reader.string();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -5439,6 +5443,9 @@ $root.Trophy = (function() {
         if (message.type != null && message.hasOwnProperty("type"))
             if (!$util.isString(message.type))
                 return "type: string expected";
+        if (message.fromUserId != null && message.hasOwnProperty("fromUserId"))
+            if (!$util.isString(message.fromUserId))
+                return "fromUserId: string expected";
         return null;
     };
 
@@ -5465,6 +5472,8 @@ $root.Trophy = (function() {
                 message.timestamp = new $util.LongBits(object.timestamp.low >>> 0, object.timestamp.high >>> 0).toNumber(true);
         if (object.type != null)
             message.type = String(object.type);
+        if (object.fromUserId != null)
+            message.fromUserId = String(object.fromUserId);
         return message;
     };
 
@@ -5488,6 +5497,7 @@ $root.Trophy = (function() {
             } else
                 object.timestamp = options.longs === String ? "0" : 0;
             object.type = "";
+            object.fromUserId = "";
         }
         if (message.timestamp != null && message.hasOwnProperty("timestamp"))
             if (typeof message.timestamp === "number")
@@ -5496,6 +5506,8 @@ $root.Trophy = (function() {
                 object.timestamp = options.longs === String ? $util.Long.prototype.toString.call(message.timestamp) : options.longs === Number ? new $util.LongBits(message.timestamp.low >>> 0, message.timestamp.high >>> 0).toNumber(true) : message.timestamp;
         if (message.type != null && message.hasOwnProperty("type"))
             object.type = message.type;
+        if (message.fromUserId != null && message.hasOwnProperty("fromUserId"))
+            object.fromUserId = message.fromUserId;
         return object;
     };
 

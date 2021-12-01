@@ -74,6 +74,7 @@ export interface Content {
 export interface Trophy {
   timestamp: Timestamp
   type: TrophyType
+  from: UserID
 }
 
 

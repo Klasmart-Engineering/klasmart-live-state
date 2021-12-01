@@ -123,14 +123,14 @@ export function trophyRewardedToAllAction(event: ITrophyRewardedToAllEvent): Ret
 }
 
 export function trophyRewardedToUserAction(event: ITrophyRewardedToUserEvent): ReturnType<typeof classActions.rewardTrophyToUser> | undefined {
-    if(!event.userId) { console.error('ITrophyRewardedToAllEvent is missing userId'); return; }
+    if(!event.toUserId) { console.error('ITrophyRewardedToAllEvent is missing toUserId'); return; }
     if(!event.trophy) { console.error('ITrophyRewardedToAllEvent is missing trophy'); return; }
     
     const trophy = validateTrophy(event.trophy);
     if(!trophy) { return; }
 
     return classActions.rewardTrophyToUser({
-        userId: newUserId(event.userId),
+        to: newUserId(event.toUserId),
         trophy,
     });
 }

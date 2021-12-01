@@ -55,12 +55,12 @@ message SetActivityStreamIdCommand {
 }
 
 message RewardTrophyToUserCommand {
-    string user_id = 1;
-    Trophy trophy = 2;
+    string trophy_type = 1;
+    string to_user_id = 2;
 }
 
 message RewardTrophyToAllCommand {
-    Trophy trophy = 1;
+    string trophy_type = 1;
 }
 
 message SendChatMessageCommand {
@@ -106,8 +106,8 @@ message ActivityStreamIdChangedEvent {
 }
 
 message TrophyRewardedToUserEvent {
-    string user_id = 1;
-    Trophy trophy = 2;
+    Trophy trophy = 1;
+    string to_user_id = 2;
 }
 
 message TrophyRewardedToAllEvent {
@@ -145,6 +145,7 @@ message User {
 message Trophy {
     uint64 timestamp = 1;
     string type = 2;
+    string from_user_id = 3;
 }
 
 message Device {

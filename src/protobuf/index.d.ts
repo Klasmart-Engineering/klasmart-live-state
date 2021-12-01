@@ -740,11 +740,11 @@ export class SetActivityStreamIdCommand implements ISetActivityStreamIdCommand {
 /** Properties of a RewardTrophyToUserCommand. */
 export interface IRewardTrophyToUserCommand {
 
-    /** RewardTrophyToUserCommand userId */
-    userId?: (string|null);
+    /** RewardTrophyToUserCommand trophyType */
+    trophyType?: (string|null);
 
-    /** RewardTrophyToUserCommand trophy */
-    trophy?: (ITrophy|null);
+    /** RewardTrophyToUserCommand toUserId */
+    toUserId?: (string|null);
 }
 
 /** Represents a RewardTrophyToUserCommand. */
@@ -756,11 +756,11 @@ export class RewardTrophyToUserCommand implements IRewardTrophyToUserCommand {
      */
     constructor(properties?: IRewardTrophyToUserCommand);
 
-    /** RewardTrophyToUserCommand userId. */
-    public userId: string;
+    /** RewardTrophyToUserCommand trophyType. */
+    public trophyType: string;
 
-    /** RewardTrophyToUserCommand trophy. */
-    public trophy?: (ITrophy|null);
+    /** RewardTrophyToUserCommand toUserId. */
+    public toUserId: string;
 
     /**
      * Creates a new RewardTrophyToUserCommand instance using the specified properties.
@@ -836,8 +836,8 @@ export class RewardTrophyToUserCommand implements IRewardTrophyToUserCommand {
 /** Properties of a RewardTrophyToAllCommand. */
 export interface IRewardTrophyToAllCommand {
 
-    /** RewardTrophyToAllCommand trophy */
-    trophy?: (ITrophy|null);
+    /** RewardTrophyToAllCommand trophyType */
+    trophyType?: (string|null);
 }
 
 /** Represents a RewardTrophyToAllCommand. */
@@ -849,8 +849,8 @@ export class RewardTrophyToAllCommand implements IRewardTrophyToAllCommand {
      */
     constructor(properties?: IRewardTrophyToAllCommand);
 
-    /** RewardTrophyToAllCommand trophy. */
-    public trophy?: (ITrophy|null);
+    /** RewardTrophyToAllCommand trophyType. */
+    public trophyType: string;
 
     /**
      * Creates a new RewardTrophyToAllCommand instance using the specified properties.
@@ -1670,11 +1670,11 @@ export class ActivityStreamIdChangedEvent implements IActivityStreamIdChangedEve
 /** Properties of a TrophyRewardedToUserEvent. */
 export interface ITrophyRewardedToUserEvent {
 
-    /** TrophyRewardedToUserEvent userId */
-    userId?: (string|null);
-
     /** TrophyRewardedToUserEvent trophy */
     trophy?: (ITrophy|null);
+
+    /** TrophyRewardedToUserEvent toUserId */
+    toUserId?: (string|null);
 }
 
 /** Represents a TrophyRewardedToUserEvent. */
@@ -1686,11 +1686,11 @@ export class TrophyRewardedToUserEvent implements ITrophyRewardedToUserEvent {
      */
     constructor(properties?: ITrophyRewardedToUserEvent);
 
-    /** TrophyRewardedToUserEvent userId. */
-    public userId: string;
-
     /** TrophyRewardedToUserEvent trophy. */
     public trophy?: (ITrophy|null);
+
+    /** TrophyRewardedToUserEvent toUserId. */
+    public toUserId: string;
 
     /**
      * Creates a new TrophyRewardedToUserEvent instance using the specified properties.
@@ -2185,6 +2185,9 @@ export interface ITrophy {
 
     /** Trophy type */
     type?: (string|null);
+
+    /** Trophy fromUserId */
+    fromUserId?: (string|null);
 }
 
 /** Represents a Trophy. */
@@ -2201,6 +2204,9 @@ export class Trophy implements ITrophy {
 
     /** Trophy type. */
     public type: string;
+
+    /** Trophy fromUserId. */
+    public fromUserId: string;
 
     /**
      * Creates a new Trophy instance using the specified properties.

@@ -28,7 +28,7 @@ export declare const classSlice: import("@reduxjs/toolkit").Slice<ClassState, {
         activityStreamId?: ActivityStreamID | undefined;
     }, string>;
     rewardTrophyToUser: Reducer<{
-        userId: UserID;
+        to: UserID;
         trophy: Trophy;
     }, string>;
     rewardTrophyToAll: Reducer<{
@@ -60,7 +60,7 @@ export declare const classActions: import("@reduxjs/toolkit").CaseReducerActions
         activityStreamId?: ActivityStreamID | undefined;
     }, string>;
     rewardTrophyToUser: Reducer<{
-        userId: UserID;
+        to: UserID;
         trophy: Trophy;
     }, string>;
     rewardTrophyToAll: Reducer<{

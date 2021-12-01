@@ -1,5 +1,5 @@
 import { IChatMessage, IClassState, IContent, IDevice, ITrophy, IUser } from '.';
-import { Content, ContentType, newDeviceId, DeviceState, Trophy, TrophyType, newUserId, newWebRtcStreamId, newActivityStreamId, newTimestamp, ChatMessageState, ClassState, DeviceID, UserState, newUserRole, UserID } from '../models';
+import { Content, ContentType, newDeviceId, DeviceState, Trophy, newUserId, newWebRtcStreamId, newActivityStreamId, newTimestamp, ChatMessageState, ClassState, DeviceID, UserState, newUserRole, UserID, newTrophyType } from '../models';
 import { values } from '../types';
 
 
@@ -145,9 +145,11 @@ export function validateDevice({id, activityStreamId, userId, webRtcStreamIds}: 
 export function validateTrophy(trophy: ITrophy): Trophy | undefined {
     if (!trophy.timestamp) { console.error('ITrophy is missing trophy.timestamp'); return; }
     if (!trophy.type) { console.error('ITrophy is missing trophy.type'); return; }
+    if (!trophy.fromUserId) { console.error('ITrophy is missing trophy.fromUserId'); return; }
     //TODO: Handle uint64
     const timestamp = trophy.timestamp;
-    const type = trophy.type as TrophyType;
-    return { timestamp, type };
+    const type = newTrophyType(trophy.type);
+    const from = newUserId(trophy.fromUserId);
+    return { timestamp, type, from };
 }
 

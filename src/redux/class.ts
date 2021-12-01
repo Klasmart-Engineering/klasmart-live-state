@@ -106,12 +106,12 @@ const setActivityStreamId: Reducer<{deviceId: DeviceID, activityStreamId?: Activ
   device.activityStreamID = activityStreamId;
 };
 
-const rewardTrophyToUser: Reducer<{userId: UserID, trophy: Trophy}> = (
+const rewardTrophyToUser: Reducer<{to: UserID, trophy: Trophy}> = (
   state,
   action
 ) => {
-  const { userId, trophy } = action.payload;
-  state.users[userId]?.trophies.push(trophy);
+  const { to, trophy } = action.payload;
+  state.users[to]?.trophies.push(trophy);
 };
 
 const rewardTrophyToAll: Reducer<{trophy: Trophy}> = (
