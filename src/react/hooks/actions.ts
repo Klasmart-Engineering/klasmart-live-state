@@ -26,13 +26,9 @@ export function useEndClass() {
 }
 
 export function useRewardTrophyToAll() {
-  const { execute, status } = useNetworkAction((type: TrophyType) => ({
+  const { execute, status } = useNetworkAction((trophyType: TrophyType) => ({
     rewardTrophyToAll: {
-      trophy: {
-        // TODO: Should this be set by the server?
-        timestamp: Date.now(),
-        type,
-      },
+      trophyType,
     },
   }));
   return { rewardTrophyToAll: execute, status };
@@ -40,14 +36,10 @@ export function useRewardTrophyToAll() {
 
 export function useRewardTrophyToUser() {
   const { execute, status } = useNetworkAction(
-    (userId: UserID, type: TrophyType) => ({
+    (trophyType: TrophyType, toUserId: UserID) => ({
       rewardTrophyToUser: {
-        userId,
-        trophy: {
-          // TODO: Should this be set by the server?
-          timestamp: Date.now(),
-          type,
-        },
+        trophyType,
+        toUserId,
       },
     })
   );

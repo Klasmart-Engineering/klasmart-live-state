@@ -12,11 +12,11 @@ export declare function useEndClass(): {
     status: import("react-async-hook").AsyncStateStatus;
 };
 export declare function useRewardTrophyToAll(): {
-    rewardTrophyToAll: (type: TrophyType) => Promise<void>;
+    rewardTrophyToAll: (trophyType: TrophyType) => Promise<void>;
     status: import("react-async-hook").AsyncStateStatus;
 };
 export declare function useRewardTrophyToUser(): {
-    rewardTrophyToUser: (userId: UserID, type: TrophyType) => Promise<void>;
+    rewardTrophyToUser: (trophyType: TrophyType, toUserId: UserID) => Promise<void>;
     status: import("react-async-hook").AsyncStateStatus;
 };
 export declare function useSendChatMessage(): {
