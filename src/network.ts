@@ -5,24 +5,22 @@ import { NewType } from './types';
 import { ClassRequest, IClassRequest, ClassMessage, IClassResponse } from './protobuf';
 import { messageToClassAction } from './protobuf/actions';
 import { EventEmitter } from 'eventemitter3';
-import { ConnectionStatus, setConnectionError, setConnectionStatus } from './redux/network';
-import { RPC, TransportState, WSTransport } from "./rpc" 
+import { setConnectionState } from './redux/network';
+import { TransportState, WSTransport } from "./websocketTransport" 
+import { PromiseCompleter } from './promiseCompleter';
 
 export type RequestID = NewType<string, 'RequestID'>
 export const newRequestId = (value: string): RequestID => value as RequestID;
 
 export class Network<ApplicationState=unknown> {
+    private readonly rpc = new PromiseCompleter<void, string, RequestID>();  
     private transport?: WSTransport
-    private rpc = new RPC<RequestID, IClassRequest, undefined, string>(
-        (r) => this.send(r),
-    );  
     
-    private actionEmitter = new EventEmitter();
+    private readonly actionEmitter = new EventEmitter();
     constructor(
         /* eslint-disable no-unused-vars */
         public readonly store: Store<ApplicationState, Action>,
         public readonly selector: (s: ApplicationState) => State,
-
         /* eslint-enable no-unused-vars */
     ) { }
 
@@ -35,58 +33,65 @@ export class Network<ApplicationState=unknown> {
         }
     }
 
-    private async connect(url: string) {
+    public async connect(url: string) {
+        if(this.transport) { this.transport.disconnect() }
         this.transport = new WSTransport(
             url,
             (t,d) => this.onNetworkMessage(t,d),
-            (_,s) => this.onStateChange(s),
+            (s) => this.onStateChange(s),
             ['live'],
             true,
         )
-        return this.transport.connect()
+        return await this.transport.connect()
+    }
+
+    public disconnect(code?: number, reason?: string) {
+        this.transport?.disconnect(code, reason)
     }
 
     private onStateChange(state: TransportState) {
-        switch(state) {
-            
-        }
+        this.store.dispatch(setConnectionState(state));
     }
-
 
     private onNetworkMessage(transport: WSTransport, data: unknown) {
         if (!(data instanceof ArrayBuffer)) {
-            transport.close(4401, 'Binary only protocol');
+            transport.disconnect(4401, 'Binary only protocol');
             return;
         }
         try {
             if (data.byteLength <= 0) { return; }
             const message = ClassMessage.decode(new Uint8Array(data));
 
-            if (message.response && message.response.id) {
-                const requestId = newRequestId(message.response.id);
-                if(message.response.error) {
-                    this.rpc.error(requestId, message.response.error)
-                } else {
-                    this.rpc.success(requestId, undefined)
-                }
-            }
+            if (message.response) { this.handleResponse(message.response) }
 
             const action = messageToClassAction(message);
             if (!action) { return; }
+
             this.store.dispatch(action);
             const state = this.selector(this.store.getState())
             this.actionEmitter.emit(action.type, action.payload, state);
         } catch (e) {
             console.error(e)
-            transport.close(4400, 'Parse error');
+            transport.disconnect(4400, 'Parse error');
+        }
+    }
+
+    private handleResponse(response: IClassResponse) {
+        if(!response.id) { return }
+        const requestId = newRequestId(response.id);
+        if(response.error) {
+            this.rpc.reject(requestId, response.error)
+        } else {
+            this.rpc.resolve(requestId)
         }
     }
 
     public async send(command: IClassRequest): Promise<void> {
-        if (!this.transport) { throw Error('websocket has not been initialised'); }
+        if (!this.transport) { throw Error('WebSocket has not been initialised'); }
         const requestId = nanoid() as RequestID;
         const bytes = ClassRequest.encode({ requestId, ...command }).finish();
-        const sent = await this.transport.send(bytes);
+        await this.transport.send(bytes);
+        return this.rpc.createPromise(requestId)
     }
 
 }

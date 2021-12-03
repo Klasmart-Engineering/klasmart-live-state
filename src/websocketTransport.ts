@@ -1,42 +1,3 @@
-import { EventEmitter } from 'eventemitter3';
-
-export type PromiseCompleter<S,E> = {
-    resolve: (success:S) => void,
-    reject: (error: E) => void,
-}
-
-export class RPC<RequestID, Request, ResponseSuccess, ResponseError> {
-    private resolve = new Map<
-        RequestID,
-        PromiseCompleter<ResponseSuccess, ResponseError>
-    >()
-    
-    public constructor(
-        private sendHandler: (request: Request) => unknown,
-    ) {}
-
-    public send(requestId: RequestID, request: Request) {
-        if(this.resolve.has(requestId)) {throw new Error(`RequestId(${requestId}) is already in-use`)}
-        this.sendHandler(request)
-        return new Promise<ResponseSuccess>((resolve, reject) => {this.resolve.set(requestId, {resolve, reject})})
-    }
-
-    public success(requestId: RequestID, response: ResponseSuccess) {
-        this.completePromise(requestId).resolve(response);
-    }
-
-    public error(requestId: RequestID, error: ResponseError) {
-        this.completePromise(requestId).reject(error);
-    }
-
-    private completePromise(requestId: RequestID) {
-        const completer = this.resolve.get(requestId);
-        if (!completer) { throw new Error(`Recieved response for unknown requestID(${requestId})`); }
-        this.resolve.delete(requestId);
-        return completer
-    }
-}
-
 export type TransportState = "not-connected" | "connected" | "connecting" | "error"
 export class WSTransport {
     private recieveTimeoutReference?: number
@@ -46,7 +7,7 @@ export class WSTransport {
         /* eslint-disable no-unused-vars */
         private readonly url: string,
         private readonly onMessageCallback: (transport: WSTransport, data: string | ArrayBuffer | Blob) => unknown,
-        private readonly onStateChange?: (transport: WSTransport, state: TransportState) => unknown,
+        private readonly onStateChange?: (state: TransportState) => unknown,
         private readonly protocols: string[] | undefined = undefined,
         private autoconnect = true,
         private recieveMessageTimeoutTime = 5000,
@@ -58,6 +19,21 @@ export class WSTransport {
         return this._connect().then(() => true, () => false)
     }
 
+    public disconnect(code?: number | undefined, reason?: string): void {
+        this.ws?.close(code, reason);
+        if (this.recieveTimeoutReference) { clearTimeout(this.recieveTimeoutReference); }
+        if (this.sendTimeoutReference) { clearTimeout(this.sendTimeoutReference); }
+    }
+
+    public async send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+        let ws = this.ws
+        if(!ws) {
+            if(!this.autoconnect) { throw new Error('Not connected') }
+            ws = await this._connect()
+        } 
+        ws.send(data)
+        this.resetNetworkSendTimeout()
+    }
 
 
     private ws?: WebSocket
@@ -79,7 +55,7 @@ export class WSTransport {
 
     private onMessage(data: string | ArrayBuffer | Blob) {
         this.resetNetworkRecieveTimeout()
-        this.onMessageCallback(data)
+        this.onMessageCallback(this, data)
     }
 
     private onOpen() {
@@ -98,23 +74,9 @@ export class WSTransport {
         this.onStateChange?.('error');
     }
 
-    public async close(code: number | undefined = 4500, reason?: string): Promise<void> {
-        this.ws?.close(code, reason);
-    }
-
-    public async send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
-        let ws = this.ws
-        if(!ws) {
-            if(!this.autoconnect) { throw new Error('Not connected') }
-            ws = await this._connect()
-        } 
-        ws.send(data)
-        this.resetNetworkSendTimeout()
-    }
-
     private resetNetworkRecieveTimeout(): void {
-        if (this.recieveTimeoutReference !== undefined) { clearTimeout(this.recieveTimeoutReference); }
-        this.recieveTimeoutReference = setTimeout(() => this.close(4400, 'timeout'), this.recieveMessageTimeoutTime);
+        if (this.recieveTimeoutReference) { clearTimeout(this.recieveTimeoutReference); }
+        this.recieveTimeoutReference = setTimeout(() => this.disconnect(4400, 'timeout'), this.recieveMessageTimeoutTime);
     }
 
     private resetNetworkSendTimeout(): void {

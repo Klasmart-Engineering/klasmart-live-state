@@ -3,8 +3,7 @@ import { NetworkAction } from './network';
 export declare const reducer: import("redux").Reducer<import("redux").CombinedState<{
     class: import("../models").ClassState;
     network: import("redux").CombinedState<{
-        connectionStatus: import("./network").ConnectionStatus;
-        connectionError: boolean;
+        connectionStatus: any;
         myDeviceId: import("../models").DeviceID | null;
     }>;
 }>, import("redux").AnyAction>;

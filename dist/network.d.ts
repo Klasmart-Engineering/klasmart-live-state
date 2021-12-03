@@ -7,22 +7,16 @@ export declare const newRequestId: (value: string) => RequestID;
 export declare class Network<ApplicationState = unknown> {
     readonly store: Store<ApplicationState, Action>;
     readonly selector: (s: ApplicationState) => State;
-    private ws?;
-    private actionEmitter;
-    private pendingRequests;
-    private recieveTimeoutReference?;
-    private recieveMessageTimeoutTime;
-    private keepAliveTimeoutReference?;
-    private sendKeepAliveMessageInterval;
-    constructor(store: Store<ApplicationState, Action>, selector: (s: ApplicationState) => State, ws?: Promise<WebSocket> | undefined);
+    private readonly rpc;
+    private transport?;
+    private readonly actionEmitter;
+    constructor(store: Store<ApplicationState, Action>, selector: (s: ApplicationState) => State);
     onClassAction<T extends ClassActionType = ClassActionType>(actionType: T, f: NetworkHandlerCallback<T>): () => void;
-    initWs(url: string): Promise<WebSocket>;
-    close(code?: number | undefined, reason?: string): Promise<void>;
-    send(command: IClassRequest): Promise<void>;
-    private _send;
+    connect(url: string): Promise<boolean>;
+    disconnect(code?: number, reason?: string): void;
+    private onStateChange;
     private onNetworkMessage;
-    private handleRequestPromise;
-    private resetNetworkRecieveTimeout;
-    private resetNetworkSendTimeout;
+    private handleResponse;
+    send(command: IClassRequest): Promise<void>;
 }
 //# sourceMappingURL=network.d.ts.map

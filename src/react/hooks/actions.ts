@@ -6,7 +6,7 @@ import NetworkContext from "../context";
 
 export function useJoinClass() {
   const network = useContext(NetworkContext);
-  const initWs = (url: string) => network.initWs(url);
+  const initWs = (url: string) => network.connect(url);
   const { execute: joinClass, status } = useAsyncCallback(initWs, {
     onError: (e) => console.error(e),
   });
@@ -15,7 +15,7 @@ export function useJoinClass() {
 
 export function useLeaveClass() {
   const network = useContext(NetworkContext);
-  const close = (reason?: string) => network.close(4200, reason);
+  const close = (reason?: string) => network.disconnect(4200, reason);
   const { execute: leaveClass, status } = useAsyncCallback(close);
   return { leaveClass, status };
 }

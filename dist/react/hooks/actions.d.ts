@@ -1,6 +1,6 @@
 import { ActivityStreamID, Content, DeviceID, TrophyType, UserID } from "../../models";
 export declare function useJoinClass(): {
-    joinClass: (url: string) => Promise<WebSocket>;
+    joinClass: (url: string) => Promise<boolean>;
     status: import("react-async-hook").AsyncStateStatus;
 };
 export declare function useLeaveClass(): {
