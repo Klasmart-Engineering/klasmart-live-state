@@ -6,31 +6,23 @@ import { ClassRequest, IClassRequest, ClassMessage, IClassResponse } from './pro
 import { messageToClassAction } from './protobuf/actions';
 import { EventEmitter } from 'eventemitter3';
 import { ConnectionStatus, setConnectionError, setConnectionStatus } from './redux/network';
+import { RPC, TransportState, WSTransport } from "./rpc" 
 
 export type RequestID = NewType<string, 'RequestID'>
 export const newRequestId = (value: string): RequestID => value as RequestID;
 
-interface NetworkPromise {
-    resolve: () => unknown,
-    reject: (reason?: string) => unknown
-}
-
 export class Network<ApplicationState=unknown> {
+    private transport?: WSTransport
+    private rpc = new RPC<RequestID, IClassRequest, undefined, string>(
+        (r) => this.send(r),
+    );  
+    
     private actionEmitter = new EventEmitter();
-    // Maintains a map of promises to be resolved/rejected on receipt of a future network message
-    private pendingRequests = new Map<RequestID, NetworkPromise>()
-
-    private recieveTimeoutReference?: number
-    private recieveMessageTimeoutTime = 5000
-
-    private keepAliveTimeoutReference?: number
-    private sendKeepAliveMessageInterval = 1000
-
     constructor(
         /* eslint-disable no-unused-vars */
         public readonly store: Store<ApplicationState, Action>,
         public readonly selector: (s: ApplicationState) => State,
-        private ws?: Promise<WebSocket>,
+
         /* eslint-enable no-unused-vars */
     ) { }
 
@@ -43,73 +35,42 @@ export class Network<ApplicationState=unknown> {
         }
     }
 
-    public async initWs(url: string): Promise<WebSocket> {
-        if (this.ws) { return this.ws; }
-        this.ws = new Promise<WebSocket>((resolve, reject) => {
-            this.store.dispatch(setConnectionStatus(ConnectionStatus.Connecting));
-
-            const ws = new WebSocket(url, ['live']);
-            ws.binaryType = 'arraybuffer';
-            ws.addEventListener('open', (e) => {
-                console.log('open', e);
-                resolve(ws);
-                this.store.dispatch(setConnectionError(false));
-                this.store.dispatch(setConnectionStatus(ConnectionStatus.Connected));
-                this.resetNetworkSendTimeout();
-                this.resetNetworkRecieveTimeout();
-            });
-            ws.addEventListener('close', (e) => {
-                console.log('close', e);
-                this.ws = undefined;
-                reject(e);
-                this.store.dispatch(setConnectionStatus(ConnectionStatus.Disconnected));
-            });
-            ws.addEventListener('error', (e) => {
-                console.log('error', e);
-                reject(e);
-                this.store.dispatch(setConnectionError(true));
-            });
-            ws.addEventListener('message', (e) => {
-                this.onNetworkMessage(ws, e.data);
-            });
-        });
-        return this.ws;
+    private async connect(url: string) {
+        this.transport = new WSTransport(
+            url,
+            (t,d) => this.onNetworkMessage(t,d),
+            (_,s) => this.onStateChange(s),
+            ['live'],
+            true,
+        )
+        return this.transport.connect()
     }
 
-    public async close(code: number | undefined = 4500, reason?: string): Promise<void> {
-        (await this.ws)?.close(code, reason);
-    }
-
-    public async send(command: IClassRequest): Promise<void> {
-        if (!this.ws) {
-            throw Error('websocket has not been initialised');
+    private onStateChange(state: TransportState) {
+        switch(state) {
+            
         }
-        const requestId = nanoid() as RequestID;
-        const bytes = ClassRequest.encode({ requestId, ...command }).finish();
-        const sent = await this._send(bytes);
-        if (!sent) { throw new Error('Failed to send'); }
-        return new Promise<void>((resolve, reject) => this.pendingRequests.set(requestId, { resolve, reject }));
     }
 
-    private async _send(bytes: ArrayBuffer) {
-        const ws = await this.ws;
-        if (!ws) { return false; }
-        ws.send(bytes);
-        this.resetNetworkSendTimeout();
-        return true;
-    }
 
-    private onNetworkMessage(ws: WebSocket, data: unknown) {
-        this.resetNetworkRecieveTimeout();
+    private onNetworkMessage(transport: WSTransport, data: unknown) {
         if (!(data instanceof ArrayBuffer)) {
-            ws.close(4401, 'Binary only protocol');
+            transport.close(4401, 'Binary only protocol');
             return;
         }
         try {
             if (data.byteLength <= 0) { return; }
             const message = ClassMessage.decode(new Uint8Array(data));
 
-            if (message.response) { this.handleRequestPromise(message.response); }
+            if (message.response && message.response.id) {
+                const requestId = newRequestId(message.response.id);
+                if(message.response.error) {
+                    this.rpc.error(requestId, message.response.error)
+                } else {
+                    this.rpc.success(requestId, undefined)
+                }
+            }
+
             const action = messageToClassAction(message);
             if (!action) { return; }
             this.store.dispatch(action);
@@ -117,37 +78,15 @@ export class Network<ApplicationState=unknown> {
             this.actionEmitter.emit(action.type, action.payload, state);
         } catch (e) {
             console.error(e)
-            ws.close(4400, 'Parse error');
+            transport.close(4400, 'Parse error');
         }
     }
 
-    private handleRequestPromise(event: IClassResponse) {
-        if (!event.id) { console.error('Recieved ClassResponse without an id'); return; }
-        const id = newRequestId(event.id);
-
-        const pendingPromise = this.pendingRequests.get(id);
-        if (!pendingPromise) {
-            console.error(`Recieved aknowledge(${id}) for unknown request`);
-            return;
-        }
-
-        this.pendingRequests.delete(id);
-        if (event.error) {
-            pendingPromise.reject(event.error);
-        } else {
-            pendingPromise.resolve();
-        }
-    }
-
-    private resetNetworkRecieveTimeout(): void {
-        // Enable this when the client implments sending keep alive messages 
-        if (this.recieveTimeoutReference !== undefined) { clearTimeout(this.recieveTimeoutReference); }
-        this.recieveTimeoutReference = setTimeout(() => this.close(4400, 'timeout'), this.recieveMessageTimeoutTime);
-    }
-
-    private resetNetworkSendTimeout(): void {
-        if (this.keepAliveTimeoutReference) { clearTimeout(this.keepAliveTimeoutReference); }
-        this.keepAliveTimeoutReference = setTimeout(() => this._send(new Uint8Array(0)), this.sendKeepAliveMessageInterval);
+    public async send(command: IClassRequest): Promise<void> {
+        if (!this.transport) { throw Error('websocket has not been initialised'); }
+        const requestId = nanoid() as RequestID;
+        const bytes = ClassRequest.encode({ requestId, ...command }).finish();
+        const sent = await this.transport.send(bytes);
     }
 
 }

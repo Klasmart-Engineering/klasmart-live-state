@@ -88,7 +88,7 @@ function useNetworkAction<Args extends any[] = any[]>(
   const network = useContext(NetworkContext);
   const sendRequest = async (...args: Args) => {
     const request = buildRequest(...args);
-    network.send(request);
+    await network.send(request);
   };
   return useAsyncCallback(sendRequest);
 }
