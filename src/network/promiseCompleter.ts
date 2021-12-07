@@ -5,7 +5,7 @@ type PromiseCallbacks<S,E> = {
 
 export class PromiseCompleter<Success=void, Failure=Error, PromiseId=string> {
     public constructor(
-        private readonly callbacks = new Map<PromiseId,PromiseCallbacks<Success, Failure>>()
+        private readonly callbacks = new Map<PromiseId, PromiseCallbacks<Success, Failure>>()
     ) {}
 
     public createPromise(id: PromiseId) {

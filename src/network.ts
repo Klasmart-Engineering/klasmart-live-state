@@ -6,8 +6,8 @@ import { ClassRequest, IClassRequest, ClassMessage, IClassResponse } from './pro
 import { messageToClassAction } from './protobuf/actions';
 import { EventEmitter } from 'eventemitter3';
 import { setConnectionState } from './redux/network';
-import { TransportState, WSTransport } from "./websocketTransport" 
-import { PromiseCompleter } from './promiseCompleter';
+import { TransportState, WSTransport } from "./network/websocketTransport" 
+import { PromiseCompleter } from './network/promiseCompleter';
 
 export type RequestID = NewType<string, 'RequestID'>
 export const newRequestId = (value: string): RequestID => value as RequestID;

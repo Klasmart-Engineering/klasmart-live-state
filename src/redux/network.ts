@@ -1,7 +1,7 @@
 import { createAction, createReducer } from '@reduxjs/toolkit';
 import { combineReducers } from 'redux';
 import { DeviceID } from '../models';
-import { TransportState } from '../websocketTransport';
+import { TransportState } from '../network/websocketTransport';
 import { ValueOf } from '../types';
 import { classActions } from "./class"
 
