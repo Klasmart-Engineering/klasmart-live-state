@@ -3,10 +3,9 @@ import { NewType } from '../types';
 import { TransportState, WSTransport } from '../network/websocketTransport';
 import { PromiseCompleter } from '../network/promiseCompleter';
 
-
-type RequestId = NewType<string, "requestId">
 type ProducerId = NewType<string, "producerId">
 type ConsumerId = NewType<string, "consumerId">
+type RequestId = NewType<string, "requestId">
 
 type RequestMessage = {
     id: RequestId,
@@ -34,34 +33,19 @@ type Response = {
     result: Result|void,
 }
 
-
 type ResponseMessage = {
     response?: Response,
-    consumerCreated?: {
-        id: ConsumerId,
-        producerId: ProducerId,
-        kind: MediaSoup.MediaKind,
-        rtpParameters: MediaSoup.RtpParameters,
-        paused: boolean,
-    },
-    consumerPaused?: {
-        id: ProducerId,
-        local: boolean,
-        global: boolean,
-    },
-    producerPaused?: {
-        id: ProducerId,
-        local: boolean,
-        global: boolean,
-    },
-    consumerClosed?: {
-        id: ProducerId,
-    },
-    producerClosed?: {
-        id: ProducerId,
-    },
+    consumerPaused?: PauseMessage,
+    producerPaused?: PauseMessage,
+    consumerClosed?: ProducerId
+    producerClosed?: ProducerId
 }
 
+export type PauseMessage = {
+    id: ProducerId,
+    localPause: boolean,
+    globalPause: boolean,
+}
 
 export type WebRtcTransportResult = {
     id: string,
@@ -73,14 +57,31 @@ export type WebRtcTransportResult = {
 type Result = {
     producerTransport?: WebRtcTransportResult;
     consumerTransport?: WebRtcTransportResult;
+    consumerCreated?: {
+        id: ConsumerId,
+        producerId: ProducerId,
+        kind: MediaSoup.MediaKind,
+        rtpParameters: MediaSoup.RtpParameters,
+        paused: boolean,
+    },
 }
 
+export type Producer = {
+    readonly producer: MediaSoup.Producer
+    localPause: boolean
+    globalPause: boolean
+}
+
+export type Consumer = {
+    readonly consumer: MediaSoup.Consumer
+    localPause: boolean
+    globalPause: boolean
+}
 
 export class SFU {
     private readonly device = new Device();
-    private readonly consumers = new Map<ProducerId, MediaSoup.Consumer>()
-    private readonly producers = new Map<ProducerId, MediaSoup.Producer>()
-    private rtpCapabilities?: MediaSoup.RtpCapabilities
+    private readonly consumers = new Map<ProducerId, Consumer>()
+    private readonly producers = new Map<ProducerId, Producer>()
     
     private readonly promiseCompleter = new PromiseCompleter<Result|void, string, RequestId>()
     private readonly ws: WSTransport
@@ -101,13 +102,26 @@ export class SFU {
     public async createTrack(track: MediaStreamTrack) {
         const producerTransport = await this.producerTransport();
         const producer = await producerTransport.produce({track})
-        this.producers.set(producer.id as ProducerId, producer);
+        this.producers.set(producer.id as ProducerId, {
+            producer,
+            localPause: producer.paused,
+            globalPause: false,
+        });
     }
 
     public async consumeTrack(producerId: ProducerId) {
         const consumerTransport = await this.consumerTransport()
         await this.sendRtpCapabilities()
         const response = await this.request({createConsumer: { producerId }})
+        if(!response) { throw new Error(`Recieved empty response from SFU when trying to consume producerId(${producerId})`) }
+        if(!response.consumerCreated) { throw new Error(`Recieved response without consumer parameters from SFU when trying to consume producerId(${producerId})`) }
+        const consumer = await consumerTransport.consume(response.consumerCreated)
+        this.consumers.set(producerId, {
+            consumer,
+            localPause: consumer.paused,
+            globalPause: false,
+        })
+        return consumer
     }
 
     
@@ -167,13 +181,13 @@ export class SFU {
 
     private async request(request: Request) {
         const id = this.generateRequestId()
-        await this.ws.send(JSON.stringify({id, request}))
+        const message: RequestMessage = {id, request}
+        await this.ws.send(JSON.stringify(message))
         return this.promiseCompleter.createPromise(id)
     }
+
     private _requestId = 0
     private generateRequestId() { return `${this._requestId++}` as RequestId; }
-
-
 
     private onTransportStateChange(state: TransportState) {}
 
@@ -196,12 +210,10 @@ export class SFU {
 
     private async handleMessage(message: ResponseMessage) {
         if(message.response) { this.response(message.response); }
-        if(message.consumerClosed) { }
-        if(message.consumerCreated) {
-            const {id, kind, producerId, rtpParameters, paused} = message.consumerCreated
-            this._consumerTransport = this.device.createRecvTransport({})
-        }
-
+        if(message.consumerClosed) { this.handleConsumerClosedMessage(message.consumerClosed); }
+        if(message.producerClosed) { this.handleProducerClosedMessage(message.producerClosed); } 
+        if(message.consumerPaused) { this.handleConsumerPauseMessage(message.consumerPaused); }
+        if(message.producerPaused) { this.handleProducerPauseMessage(message.producerPaused); }
     }
 
     private response(response: Response) {
@@ -213,6 +225,31 @@ export class SFU {
         }
     }
 
+    private handleConsumerClosedMessage(id: ProducerId) {
+        const consumer = this.consumers.get(id)
+        if(!consumer) { return console.error(`Could not find Consumer(${id}) to close`)}
+        consumer.consumer.close()
+        this.consumers.delete(id)
+    }
 
+    private handleProducerClosedMessage(id: ProducerId) {
+        const producer = this.producers.get(id)
+        if(!producer) { return console.error(`Could not find Producer(${id}) to close`)}
+        producer.producer.close()
+        this.producers.delete(id)
+    }
 
+    private handleConsumerPauseMessage({id, localPause, globalPause}: PauseMessage) {
+        const consumer = this.consumers.get(id)
+        if(!consumer) { return console.error(`Could not find Consumer(${id}) to pause/resume`)}
+        consumer.localPause = localPause
+        consumer.globalPause = globalPause
+    }
+
+    private handleProducerPauseMessage({id, localPause, globalPause}: PauseMessage) {
+        const producer = this.producers.get(id)
+        if(!producer) { return console.error(`Could not find Producer(${id}) to pause/resume`)}
+        producer.localPause = localPause
+        producer.globalPause = globalPause
+    }
 }
