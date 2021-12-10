@@ -1,9 +1,9 @@
-import { ClassAction } from './class';
-import { NetworkAction } from './network';
+import { ClassAction } from "./class";
+import { NetworkAction } from "./network";
 export declare const reducer: import("redux").Reducer<import("redux").CombinedState<{
     class: import("../models").ClassState;
     network: import("redux").CombinedState<{
-        connectionStatus: any;
+        connectionStatus: import("../network/websocketTransport").TransportState;
         myDeviceId: import("../models").DeviceID | null;
     }>;
 }>, import("redux").AnyAction>;

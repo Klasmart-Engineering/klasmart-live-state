@@ -1,8 +1,16 @@
 import { useContext } from "react";
 import { useAsyncCallback } from "react-async-hook";
-import { ActivityStreamID, Content, DeviceID, TrophyType, UserID } from "../../models";
+import {
+  ActivityStreamID,
+  Content,
+  DeviceID,
+  TrophyType,
+  UserID,
+} from "../../models";
+import { ProducerId, Request } from "../../network/sfu";
 import { IClassRequest } from "../../protobuf";
-import NetworkContext from "../context";
+import NetworkContext from "../networkContext";
+import WebRtcContext from "../rtcContext";
 
 export function useJoinClass() {
   const network = useContext(NetworkContext);
@@ -89,6 +97,58 @@ function useNetworkAction<Args extends any[] = any[]>(
   const sendRequest = async (...args: Args) => {
     const request = buildRequest(...args);
     await network.send(request);
+  };
+  return useAsyncCallback(sendRequest);
+}
+
+export function useLocallyPauseMediaStream() {
+  const { execute, status } = useProducerAction((id: ProducerId) => ({
+    locallyPause: {
+      paused: true,
+      id,
+    },
+  }));
+  return { locallyPause: execute, status };
+}
+
+export function useLocallyPlayMediaStream() {
+  const { execute, status } = useProducerAction((id: ProducerId) => ({
+    locallyPause: {
+      paused: false,
+      id,
+    },
+  }));
+  return { locallyPlay: execute, status };
+}
+
+export function useGloballyPauseMediaStream() {
+  const { execute, status } = useProducerAction((id: ProducerId) => ({
+    globallyPause: {
+      paused: true,
+      id,
+    },
+  }));
+  return { globallyPause: execute, status };
+}
+
+export function useGloballyPlayMediaStream() {
+  const { execute, status } = useProducerAction((id: ProducerId) => ({
+    globallyPause: {
+      paused: false,
+      id,
+    },
+  }));
+  return { globallyPlay: execute, status };
+}
+
+function useProducerAction<Args extends any[] = any[]>(
+  buildRequest: (...args: Args) => Request
+) {
+  const webRtcManager = useContext(WebRtcContext);
+  const sfu = webRtcManager.getSFU();
+  const sendRequest = async (...args: Args) => {
+    const request = buildRequest(...args);
+    await sfu.request(request);
   };
   return useAsyncCallback(sendRequest);
 }

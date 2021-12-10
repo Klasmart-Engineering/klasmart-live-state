@@ -1,6 +1,6 @@
-import { CaseReducer, PayloadAction } from '@reduxjs/toolkit';
-import { ClassState, UserID, Content, ChatMessageState, DeviceID, ActivityStreamID, DeviceState, Trophy, UserRole, Timestamp } from '../models';
-import { ValueOf } from '../types';
+import { CaseReducer, PayloadAction } from "@reduxjs/toolkit";
+import { ClassState, UserID, Content, ChatMessageState, DeviceID, ActivityStreamID, DeviceState, Trophy, UserRole, Timestamp } from "../models";
+import { ValueOf } from "../types";
 declare type Reducer<P = void, T extends string = string> = CaseReducer<ClassState, PayloadAction<P, T>>;
 export declare const INITIAL_ROOM_STATE: ClassState;
 export declare const classSliceActionPrefix = "class";

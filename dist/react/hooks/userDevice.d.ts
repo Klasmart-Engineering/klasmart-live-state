@@ -1,6 +1,6 @@
 import { DeviceID, DeviceState, UserID, UserRole, UserState } from "../../models";
 import { NewType } from "../../types";
-export declare type UserDeviceID = NewType<string, 'UserDeviceID'>;
+export declare type UserDeviceID = NewType<string, "UserDeviceID">;
 export declare const newUserDeviceId: (userId: UserID, deviceId: DeviceID) => UserDeviceID;
 export interface UserDevice {
     id: UserDeviceID;

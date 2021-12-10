@@ -1,4 +1,4 @@
-import { NewType } from './types';
+import { NewType } from "./types";
 export declare enum FeedbackType {
     END_CLASS = 0,
     LEAVE_CLASS = 1
@@ -29,19 +29,19 @@ export declare enum ContentType {
     Camera = "Camera",
     Screen = "Screen"
 }
-export declare type UserID = NewType<string, 'UserID'>;
+export declare type UserID = NewType<string, "UserID">;
 export declare const newUserId: (value: string) => UserID;
-export declare type DeviceID = NewType<string, 'DeviceID'>;
+export declare type DeviceID = NewType<string, "DeviceID">;
 export declare const newDeviceId: (value: string) => DeviceID;
-export declare type ActivityStreamID = NewType<string, 'ActivityStreamID'>;
+export declare type ActivityStreamID = NewType<string, "ActivityStreamID">;
 export declare const newActivityStreamId: (value: string) => ActivityStreamID;
-export declare type WebRTCStreamID = NewType<string, 'WebRTCStreamID'>;
+export declare type WebRTCStreamID = NewType<string, "WebRTCStreamID">;
 export declare const newWebRtcStreamId: (value: string) => WebRTCStreamID;
-export declare type Timestamp = NewType<number, 'Timestamp'>;
+export declare type Timestamp = NewType<number, "Timestamp">;
 export declare const newTimestamp: (value: number) => Timestamp;
-export declare type TrophyType = NewType<string, 'TrophyType'>;
+export declare type TrophyType = NewType<string, "TrophyType">;
 export declare const newTrophyType: (value: string) => TrophyType;
-export declare type UserRole = NewType<string, 'UserRole'>;
+export declare type UserRole = NewType<string, "UserRole">;
 export declare const newUserRole: (role: string) => UserRole;
 export interface Content {
     type: ContentType;
