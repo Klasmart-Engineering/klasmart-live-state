@@ -2,10 +2,13 @@ import {types as MediaSoup, Device} from "mediasoup-client"
 import { NewType } from '../types';
 import { TransportState, WSTransport } from '../network/websocketTransport';
 import { PromiseCompleter } from '../network/promiseCompleter';
+import { Store } from "@reduxjs/toolkit";
+import { Action, State } from "../redux/reducer";
+import { webrtcSlice } from "../redux/sfu";
 
-type ProducerId = NewType<string, "producerId">
-type ConsumerId = NewType<string, "consumerId">
-type RequestId = NewType<string, "requestId">
+export type ProducerId = NewType<string, "producerId">
+export type ConsumerId = NewType<string, "consumerId">
+export type RequestId = NewType<string, "requestId">
 
 type RequestMessage = {
     id: RequestId,
@@ -66,27 +69,23 @@ type Result = {
     },
 }
 
-export type Producer = {
-    readonly producer: MediaSoup.Producer
+export type Track = {
+    producer?: MediaSoup.Producer
+    consumer?: MediaSoup.Consumer
     localPause: boolean
     globalPause: boolean
 }
 
-export type Consumer = {
-    readonly consumer: MediaSoup.Consumer
-    localPause: boolean
-    globalPause: boolean
-}
-
-export class SFU {
+export class SFU<ApplicationState=unknown> {
     private readonly device = new Device();
-    private readonly consumers = new Map<ProducerId, Consumer>()
-    private readonly producers = new Map<ProducerId, Producer>()
+    private readonly tracks = new Map<ProducerId, Track>()
     
     private readonly promiseCompleter = new PromiseCompleter<Result|void, string, RequestId>()
     private readonly ws: WSTransport
     
     public constructor(
+        private readonly store: Store<ApplicationState, Action>,
+        private readonly selector: (s: ApplicationState) => State,
         readonly url: string,
     ) {
         this.ws = new WSTransport(
@@ -99,14 +98,23 @@ export class SFU {
         this.ws.connect() 
     }
 
+    public track(producerId: ProducerId) {
+        const track = this.tracks.get(producerId)
+        return track?.producer?.track || track?.consumer?.track || undefined
+    }
+
     public async createTrack(track: MediaStreamTrack) {
         const producerTransport = await this.producerTransport();
-        const producer = await producerTransport.produce({track})
-        this.producers.set(producer.id as ProducerId, {
+        const producer = await producerTransport.produce({track, zeroRtpOnPause: true, disableTrackOnPause: true})
+        producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport(${producerTransport.id}) closed`));
+        producer.on("trackended", () => console.log(`Producer(${producer.id}) ended`));
+        
+        this.setTrack(producer.id as ProducerId, {
             producer,
             localPause: producer.paused,
-            globalPause: false,
-        });
+            globalPause: false
+        })
+        return producer
     }
 
     public async consumeTrack(producerId: ProducerId) {
@@ -115,15 +123,18 @@ export class SFU {
         const response = await this.request({createConsumer: { producerId }})
         if(!response) { throw new Error(`Recieved empty response from SFU when trying to consume producerId(${producerId})`) }
         if(!response.consumerCreated) { throw new Error(`Recieved response without consumer parameters from SFU when trying to consume producerId(${producerId})`) }
+        
         const consumer = await consumerTransport.consume(response.consumerCreated)
-        this.consumers.set(producerId, {
+        consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s Transport(${consumerTransport.id}) closed`));
+        consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
+
+        this.setTrack(consumer.id as ProducerId, {
             consumer,
             localPause: consumer.paused,
-            globalPause: false,
+            globalPause: false
         })
         return consumer
     }
-
     
     private _consumerTransportPromise?: Promise<MediaSoup.Transport>
     private _consumerTransport?: MediaSoup.Transport
@@ -138,6 +149,10 @@ export class SFU {
                     if(!consumerTransport) { return reject('Response from SFU does not contain consumer transport') }
                     this._consumerTransport = this.device.createRecvTransport(consumerTransport)
                     this._consumerTransport.on("connect", ({dtlsParameters}) => this.request({consumerTransportConnect: {dtlsParameters}}))
+                    this._consumerTransport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
+                        const action = webrtcSlice.actions.setConsumerConnectionStatus({url: this.url, connectionState})
+                        this.store.dispatch(action)
+                    })
                     return this._consumerTransport
                 } catch(e) {
                     reject(e)
@@ -162,6 +177,10 @@ export class SFU {
                     this._producerTransport = this.device.createSendTransport(producerTransport)
                     this._producerTransport.on("connect", ({dtlsParameters}) => this.request({producerTransportConnect: {dtlsParameters}}))
                     this._producerTransport.on("produce", (createTrack) => this.request({createTrack}))
+                    this._producerTransport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
+                        const action = webrtcSlice.actions.setProducerConnectionStatus({url: this.url, connectionState})
+                        this.store.dispatch(action)
+                    })
                     resolve(this._producerTransport)
                 } catch(e) {
                     reject(e)
@@ -210,10 +229,12 @@ export class SFU {
 
     private async handleMessage(message: ResponseMessage) {
         if(message.response) { this.response(message.response); }
-        if(message.consumerClosed) { this.handleConsumerClosedMessage(message.consumerClosed); }
-        if(message.producerClosed) { this.handleProducerClosedMessage(message.producerClosed); } 
-        if(message.consumerPaused) { this.handleConsumerPauseMessage(message.consumerPaused); }
-        if(message.producerPaused) { this.handleProducerPauseMessage(message.producerPaused); }
+        if(message.consumerPaused) { this.handlePauseMessage(message.consumerPaused); }
+        if(message.producerPaused) { this.handlePauseMessage(message.producerPaused); }
+        
+        //Assumes that the user can't have both a producer and consumer for the same track
+        if(message.consumerClosed) { this.closeTrack(message.consumerClosed); }
+        if(message.producerClosed) { this.closeTrack(message.producerClosed); } 
     }
 
     private response(response: Response) {
@@ -225,31 +246,34 @@ export class SFU {
         }
     }
 
-    private handleConsumerClosedMessage(id: ProducerId) {
-        const consumer = this.consumers.get(id)
-        if(!consumer) { return console.error(`Could not find Consumer(${id}) to close`)}
-        consumer.consumer.close()
-        this.consumers.delete(id)
+    private closeTrack(producerId: ProducerId) {
+        this.tracks.delete(producerId)
+        
+        const action = webrtcSlice.actions.closeTrack({url: this.url, producerId})
+        this.store.dispatch(action)
     }
 
-    private handleProducerClosedMessage(id: ProducerId) {
-        const producer = this.producers.get(id)
-        if(!producer) { return console.error(`Could not find Producer(${id}) to close`)}
-        producer.producer.close()
-        this.producers.delete(id)
+    private setTrack(producerId: ProducerId, track: Track) {
+        this.tracks.set(producerId, track)
+        const action = webrtcSlice.actions.setTrack({
+            url: this.url,
+            producerId,
+            status: {
+                localPause: track.localPause,
+                globalPause: track.globalPause
+            }
+        })
+        this.store.dispatch(action)
     }
 
-    private handleConsumerPauseMessage({id, localPause, globalPause}: PauseMessage) {
-        const consumer = this.consumers.get(id)
-        if(!consumer) { return console.error(`Could not find Consumer(${id}) to pause/resume`)}
-        consumer.localPause = localPause
-        consumer.globalPause = globalPause
-    }
+    private handlePauseMessage({id: producerId, localPause, globalPause}: PauseMessage) {
+        const track = this.tracks.get(producerId)
+        if(!track) { return console.error(`Could not find Track(${producerId}) to pause/resume producer`)}
+        
+        track.localPause = localPause
+        track.globalPause = globalPause
 
-    private handleProducerPauseMessage({id, localPause, globalPause}: PauseMessage) {
-        const producer = this.producers.get(id)
-        if(!producer) { return console.error(`Could not find Producer(${id}) to pause/resume`)}
-        producer.localPause = localPause
-        producer.globalPause = globalPause
+        const action = webrtcSlice.actions.setTrack({url: this.url, producerId, status: {localPause, globalPause} })
+        this.store.dispatch(action)
     }
 }
