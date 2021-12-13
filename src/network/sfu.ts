@@ -104,10 +104,15 @@ export class SFU<ApplicationState = unknown> {
   }
 
   public createTracks(stream: MediaStream) {
-    return stream.getTracks().map((t) => this.createTrack(t));
+    const tracks = stream.getTracks()
+    return tracks.map((t) => this.createTrack(t));
   }
 
-  public async createTrack(track: MediaStreamTrack) {
+  public consumeTracks(ids: ProducerId[]) {
+    return ids.map((t) => this.consumeTrack(t));
+  }
+
+  private async createTrack(track: MediaStreamTrack) {
     const producerTransport = await this.producerTransport();
     const producer = await producerTransport.produce({ track, zeroRtpOnPause: true, disableTrackOnPause: true })
     producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport(${producerTransport.id}) closed`));
@@ -121,7 +126,7 @@ export class SFU<ApplicationState = unknown> {
     return producer
   }
 
-  public async consumeTrack(producerId: ProducerId) {
+  private async consumeTrack(producerId: ProducerId) {
     const consumerTransport = await this.consumerTransport()
     await this.sendRtpCapabilities()
     const response = await this.request({ createConsumer: { producerId } })

@@ -11,7 +11,7 @@ export const reducer = combineReducers({
 });
 
 export type State = ReturnType<typeof reducer>
-export type Action = never
+export type Action =
   | ClassAction
   | NetworkAction
   | ReturnType<ValueOf<typeof webrtcSlice.actions>>

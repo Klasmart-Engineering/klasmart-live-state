@@ -4,7 +4,6 @@ import { createSlice } from "@reduxjs/toolkit/dist/createSlice";
 import { ProducerId } from "../network/sfu";
 import { types as MediaSoup } from "mediasoup-client"
 
-
 export type WebRtcState = {
     sfus: Record<string, SfuState>
 }

@@ -15,8 +15,8 @@ export class WebRtcManager<ApplicationState = unknown> {
         return this.sfu(url)?.track(trackId as ProducerId)
     }
 
-    public send(url: string, track: MediaStreamTrack) {
-        return this.sfu(url).createTrack(track)
+    public send(url: string, stream: MediaStream) {
+        return this.sfu(url).createTracks(stream)
     }
 
     private sfu(url: string) {
