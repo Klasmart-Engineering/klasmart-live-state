@@ -1,8 +1,7 @@
 import React, { ReactNode, useMemo } from "react";
 import { useStore } from "react-redux";
-import { WebRtcManager } from "../network/webRtcManager";
 import { Action, State } from "../redux/reducer";
-import WebRtcContext from "./rtcContext";
+import { WebRtcContext, WebRtcManager } from "./rtcContext";
 
 export interface WebRtcProviderProps<ApplicationState = unknown> {
   children?: ReactNode;

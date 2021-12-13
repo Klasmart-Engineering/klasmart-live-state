@@ -1,29 +1,40 @@
 import { Store } from '@reduxjs/toolkit';
 import React from 'react';
-import { ProducerId, SFU } from '../network/sfu';
+import { ProducerID, SFU, SfuID } from '../network/sfu';
 import { Action, State } from '../redux/reducer';
 
 export class WebRtcManager<ApplicationState = unknown> {
 
-    private sfus = new Map<string, SFU<ApplicationState>>();
+    private sfus = new Map<SfuID, SFU<ApplicationState>>();
     public constructor(
         public readonly store: Store<ApplicationState, Action>,
         public readonly selector: (s: ApplicationState) => State,
     ) { }
 
-    public track(url: string, trackId: string) {
-        return this.sfu(url)?.track(trackId as ProducerId)
+    public async globalPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error('Not implemented') }
+    public async localPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error('Not implemented') }
+
+    public getTracks(id: SfuID, ids: ProducerID[]) {
+        const sfu = this.sfu(id)
+        return ids.map(id => sfu.getTrack(id))
     }
 
-    public send(url: string, stream: MediaStream) {
-        return this.sfu(url).createTracks(stream)
+    public async recieveTrack(id: SfuID, ids: ProducerID[]) {
+        const sfu = this.sfu(id)
+        return await Promise.allSettled(ids.map(id => sfu.consumeTrack(id)))
     }
 
-    private sfu(url: string) {
-        let sfu = this.sfus.get(url);
+    public async sendTracks(id: SfuID, tracks: MediaStreamTrack[]) {
+        const sfu = this.sfu(id)
+        if(!sfu) { return }
+        return await Promise.allSettled(tracks.map(t => sfu.produceTrack(t)))
+    }
+
+    private sfu(id: SfuID) {
+        let sfu = this.sfus.get(id);
         if (!sfu) {
-            sfu = new SFU<ApplicationState>(this.store, this.selector, url)
-            this.sfus.set(url, sfu);
+            sfu = new SFU<ApplicationState>(id, this.store, this.selector)
+            this.sfus.set(id, sfu);
         }
         return sfu
     }

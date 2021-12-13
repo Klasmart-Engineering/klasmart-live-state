@@ -6,12 +6,13 @@ import { Store } from "@reduxjs/toolkit";
 import { Action, State } from "../redux/reducer";
 import { webrtcSlice } from "../redux/sfu";
 
-export type ProducerId = NewType<string, "producerId">
-export type ConsumerId = NewType<string, "consumerId">
-export type RequestId = NewType<string, "requestId">
+export type SfuID = NewType<string, "sfuId">
+export type ProducerID = NewType<string, "producerId">
+export type ConsumerID = NewType<string, "consumerId">
+export type RequestID = NewType<string, "requestId">
 
 type RequestMessage = {
-  id: RequestId,
+  id: RequestID,
   request: Request,
 }
 
@@ -22,17 +23,17 @@ type Request = {
   createTrack?: { kind: MediaSoup.MediaKind, rtpParameters: MediaSoup.RtpParameters };
   consumerTransport?: unknown;
   consumerTransportConnect?: { dtlsParameters: MediaSoup.DtlsParameters };
-  createConsumer?: { producerId: ProducerId };
-  locallyPause?: { paused: boolean, id: ProducerId };
-  globallyPause?: { paused: boolean, id: ProducerId };
+  createConsumer?: { producerId: ProducerID };
+  locallyPause?: { paused: boolean, id: ProducerID };
+  globallyPause?: { paused: boolean, id: ProducerID };
   end?: unknown;
 }
 
 type Response = {
-  id: RequestId;
+  id: RequestID;
   error: string,
 } | {
-  id: RequestId;
+  id: RequestID;
   result: Result | void,
 }
 
@@ -40,12 +41,12 @@ type ResponseMessage = {
   response?: Response,
   consumerPaused?: PauseMessage,
   producerPaused?: PauseMessage,
-  consumerClosed?: ProducerId
-  producerClosed?: ProducerId
+  consumerClosed?: ProducerID
+  producerClosed?: ProducerID
 }
 
 export type PauseMessage = {
-  id: ProducerId,
+  id: ProducerID,
   localPause: boolean,
   globalPause: boolean,
 }
@@ -61,8 +62,8 @@ type Result = {
   producerTransport?: WebRtcTransportResult;
   consumerTransport?: WebRtcTransportResult;
   consumerCreated?: {
-    id: ConsumerId,
-    producerId: ProducerId,
+    id: ConsumerID,
+    producerId: ProducerID,
     kind: MediaSoup.MediaKind,
     rtpParameters: MediaSoup.RtpParameters,
     paused: boolean,
@@ -78,15 +79,16 @@ export type Track = {
 
 export class SFU<ApplicationState = unknown> {
   private readonly device = new Device();
-  private readonly tracks = new Map<ProducerId, Track>()
+  private readonly tracks = new Map<ProducerID, Track>()
 
-  private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>()
+  private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestID>()
   private readonly ws: WSTransport
 
   public constructor(
+    private readonly id: SfuID,
     private readonly store: Store<ApplicationState, Action>,
     private readonly selector: (s: ApplicationState) => State,
-    readonly url: string,
+    readonly url = getUrl(id),
   ) {
     this.ws = new WSTransport(
       url,
@@ -97,28 +99,28 @@ export class SFU<ApplicationState = unknown> {
     )
     this.ws.connect()
   }
+  
 
-  public track(producerId: ProducerId) {
-    const track = this.tracks.get(producerId)
-    return track?.producer?.track || track?.consumer?.track || undefined
+  public async getTrack(id: ProducerID) {
+    const track = this.tracks.get(id)
+    const mediaTrack = track?.producer?.track || track?.consumer?.track
+    if(mediaTrack) {return mediaTrack}
+    const consumer = await this.consumeTrack(id);
+    return consumer.track
   }
 
-  public createTracks(stream: MediaStream) {
-    const tracks = stream.getTracks()
-    return tracks.map((t) => this.createTrack(t));
-  }
-
-  public consumeTracks(ids: ProducerId[]) {
-    return ids.map((t) => this.consumeTrack(t));
-  }
-
-  private async createTrack(track: MediaStreamTrack) {
+  public async produceTrack(track: MediaStreamTrack) {
     const producerTransport = await this.producerTransport();
-    const producer = await producerTransport.produce({ track, zeroRtpOnPause: true, disableTrackOnPause: true })
+    const producer = await producerTransport.produce({
+      track,
+      zeroRtpOnPause: true,
+      disableTrackOnPause: true,
+      stopTracks: true
+    })
     producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport(${producerTransport.id}) closed`));
     producer.on("trackended", () => console.log(`Producer(${producer.id}) ended`));
 
-    this.setTrack(producer.id as ProducerId, {
+    this.setTrack(producer.id as ProducerID, {
       producer,
       localPause: producer.paused,
       globalPause: false
@@ -126,7 +128,7 @@ export class SFU<ApplicationState = unknown> {
     return producer
   }
 
-  private async consumeTrack(producerId: ProducerId) {
+  public async consumeTrack(producerId: ProducerID) {
     const consumerTransport = await this.consumerTransport()
     await this.sendRtpCapabilities()
     const response = await this.request({ createConsumer: { producerId } })
@@ -137,7 +139,7 @@ export class SFU<ApplicationState = unknown> {
     consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s Transport(${consumerTransport.id}) closed`));
     consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
 
-    this.setTrack(consumer.id as ProducerId, {
+    this.setTrack(consumer.id as ProducerID, {
       consumer,
       localPause: consumer.paused,
       globalPause: false
@@ -159,7 +161,7 @@ export class SFU<ApplicationState = unknown> {
           this._consumerTransport = this.device.createRecvTransport(consumerTransport)
           this._consumerTransport.on("connect", ({ dtlsParameters }) => this.request({ consumerTransportConnect: { dtlsParameters } }))
           this._consumerTransport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
-            const action = webrtcSlice.actions.setConsumerConnectionStatus({ url: this.url, connectionState })
+            const action = webrtcSlice.actions.setConsumerConnectionStatus({ id: this.id, connectionState })
             this.store.dispatch(action)
           })
           return this._consumerTransport
@@ -187,7 +189,7 @@ export class SFU<ApplicationState = unknown> {
           this._producerTransport.on("connect", ({ dtlsParameters }) => this.request({ producerTransportConnect: { dtlsParameters } }))
           this._producerTransport.on("produce", (createTrack) => this.request({ createTrack }))
           this._producerTransport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
-            const action = webrtcSlice.actions.setProducerConnectionStatus({ url: this.url, connectionState })
+            const action = webrtcSlice.actions.setProducerConnectionStatus({ id: this.id, connectionState })
             this.store.dispatch(action)
           })
           resolve(this._producerTransport)
@@ -215,7 +217,7 @@ export class SFU<ApplicationState = unknown> {
   }
 
   private _requestId = 0
-  private generateRequestId() { return `${this._requestId++}` as RequestId; }
+  private generateRequestId() { return `${this._requestId++}` as RequestID; }
 
   private onTransportStateChange(state: TransportState) { }
 
@@ -255,17 +257,17 @@ export class SFU<ApplicationState = unknown> {
     }
   }
 
-  private closeTrack(producerId: ProducerId) {
+  private closeTrack(producerId: ProducerID) {
     this.tracks.delete(producerId)
 
-    const action = webrtcSlice.actions.closeTrack({ url: this.url, producerId })
+    const action = webrtcSlice.actions.closeTrack({ id: this.id, producerId })
     this.store.dispatch(action)
   }
 
-  private setTrack(producerId: ProducerId, track: Track) {
+  private setTrack(producerId: ProducerID, track: Track) {
     this.tracks.set(producerId, track)
     const action = webrtcSlice.actions.setTrack({
-      url: this.url,
+      id: this.id,
       producerId,
       status: {
         localPause: track.localPause,
@@ -282,7 +284,14 @@ export class SFU<ApplicationState = unknown> {
     track.localPause = localPause
     track.globalPause = globalPause
 
-    const action = webrtcSlice.actions.setTrack({ url: this.url, producerId, status: { localPause, globalPause } })
+    const action = webrtcSlice.actions.setTrack({ id: this.id, producerId, status: { localPause, globalPause } })
     this.store.dispatch(action)
   }
+}
+
+function getUrl(id: SfuID) {
+  const location = new URL(window.location.toString())
+  location.protocol = 'wss'
+  location.pathname = `/sfu/${id}` 
+  return location.toString()
 }

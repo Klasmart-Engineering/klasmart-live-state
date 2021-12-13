@@ -1,18 +1,84 @@
-import { useContext, useMemo } from "react";
+import { useContext, useEffect, useMemo } from "react";
+import { useAsync, useAsyncCallback } from "react-async-hook";
 import { useSelector } from "react-redux";
+import { SfuID, ProducerID } from "../../network/sfu";
+import { State } from "../../redux/reducer";
 import { WebRtcContext } from "../rtcContext";
 
-export function useStream(url: string, trackId: string) {
-    const webrtc = useContext(WebRtcContext)
-    return webrtc.track(url, trackId);
+
+function getUserMedia(constraints?: MediaStreamConstraints): Promise<MediaStream> {
+    console.log("getUserMedia", constraints)
+    if(navigator?.mediaDevices?.getUserMedia) { return navigator?.mediaDevices?.getUserMedia(constraints); }
+    throw new Error('Could not get user media');
 }
 
-export function useSendStream(url: string, mediaStream: MediaStream) {
-    const webrtc = useContext(WebRtcContext);
-    const tracks = mediaStream.getTracks();
-    useMemo(() => {
-        tracks.map(t => webrtc.sendTrack())
+export function useCamera(constraints?: MediaStreamConstraints) {
+    if (!constraints) {
+        constraints = {
+            video: true,
+            audio: true,
+        };
+    }
+    return useAsync(getUserMedia, [constraints], {executeOnUpdate: false});
+}
 
-    }, tracks)
-    return webrtc.track(url, trackId);
+export function useWebRtcState<T = unknown>(
+    selector: (state: State) => T,
+    equalityCheck?: (left: T, right: T) => boolean
+) {
+    const webrtc = useContext(WebRtcContext)
+    return useSelector(
+      (state) => selector(webrtc.selector(state)),
+      equalityCheck
+    );
+}
+  
+
+
+export function useMediaStream(sfuId: SfuID, ids: ProducerID[]) {
+    //This will trigger rerenders
+    useWebRtcState(s => ids.map(id => s.webrtc.sfus[sfuId]?.tracks[id]))
+    
+    const webrtc = useContext(WebRtcContext);
+    const mediaStream = useMemo(() => new MediaStream(), [])
+
+    useEffect(() => {
+        const tracks = webrtc.getTracks(sfuId, ids)
+        tracks.forEach(t => t.then(track => {
+                if(mediaStream.getTrackById(track.id)) { return }
+                mediaStream.addTrack(track)
+            },
+        ))
+        //TODO: Check whether we need to remove old tracks
+    }, [ids, sfuId, mediaStream])
+
+    return mediaStream
+}
+
+export function useSendMediaStream() {
+    const webrtc = useContext(WebRtcContext);
+    return useAsyncCallback(async (sfuId: SfuID, mediaStream: MediaStream) => {
+        const tracks = mediaStream.getTracks()
+        await webrtc.sendTracks(sfuId, tracks)
+    })
+}
+
+export function useLocallyPauseMediaStream() {
+    const webrtc = useContext(WebRtcContext);
+    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID) => webrtc.localPause(sfuId, producerId, false));
+}
+
+export function useLocallyResumeMediaStream() {
+    const webrtc = useContext(WebRtcContext);
+    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID) => webrtc.localPause(sfuId, producerId, true));
+}
+
+export function useGloballyPauseMediaStream() {
+    const webrtc = useContext(WebRtcContext);
+    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID) => webrtc.globalPause(sfuId, producerId, true));
+}
+
+export function useGloballyResumeMediaStream() {
+    const webrtc = useContext(WebRtcContext);
+    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID) => webrtc.globalPause(sfuId, producerId, false));
 }

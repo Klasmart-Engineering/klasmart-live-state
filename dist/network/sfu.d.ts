@@ -1,32 +1,15 @@
 import { types as MediaSoup } from "mediasoup-client";
-import { NewType } from "../types";
-export declare type ProducerId = NewType<string, "producerId">;
-export declare type Request = {
-    rtpCapabilities?: MediaSoup.RtpCapabilities;
-    producerTransport?: unknown;
-    producerTransportConnect?: {
-        dtlsParameters: MediaSoup.DtlsParameters;
-    };
-    createTrack?: {
-        kind: MediaSoup.MediaKind;
-        rtpParameters: MediaSoup.RtpParameters;
-    };
-    consumerTransport?: unknown;
-    consumerTransportConnect?: {
-        dtlsParameters: MediaSoup.DtlsParameters;
-    };
-    createConsumer?: {
-        producerId: ProducerId;
-    };
-    locallyPause?: {
-        paused: boolean;
-        id: ProducerId;
-    };
-    globallyPause?: {
-        paused: boolean;
-        id: ProducerId;
-    };
-    end?: unknown;
+import { NewType } from '../types';
+import { Store } from "@reduxjs/toolkit";
+import { Action, State } from "../redux/reducer";
+export declare type SfuID = NewType<string, "sfuId">;
+export declare type ProducerID = NewType<string, "producerId">;
+export declare type ConsumerID = NewType<string, "consumerId">;
+export declare type RequestID = NewType<string, "requestId">;
+export declare type PauseMessage = {
+    id: ProducerID;
+    localPause: boolean;
+    globalPause: boolean;
 };
 export declare type WebRtcTransportResult = {
     id: string;
@@ -34,22 +17,25 @@ export declare type WebRtcTransportResult = {
     iceParameters: MediaSoup.IceParameters;
     dtlsParameters: MediaSoup.DtlsParameters;
 };
-declare type Result = {
-    producerTransport?: WebRtcTransportResult;
-    consumerTransport?: WebRtcTransportResult;
+export declare type Track = {
+    producer?: MediaSoup.Producer;
+    consumer?: MediaSoup.Consumer;
+    localPause: boolean;
+    globalPause: boolean;
 };
-export declare class SFU {
+export declare class SFU<ApplicationState = unknown> {
+    private readonly id;
+    private readonly store;
+    private readonly selector;
     readonly url: string;
     private readonly device;
-    private readonly consumers;
-    private readonly producers;
-    private rtpCapabilities?;
+    private readonly tracks;
     private readonly promiseCompleter;
     private readonly ws;
-    constructor(url: string);
-    createTracks(stream: MediaStream): void;
-    createTrack(track: MediaStreamTrack): Promise<void>;
-    consumeTrack(producerId: ProducerId): Promise<void>;
+    constructor(id: SfuID, store: Store<ApplicationState, Action>, selector: (s: ApplicationState) => State, url?: string);
+    getTrack(id: ProducerID): Promise<MediaStreamTrack>;
+    produceTrack(track: MediaStreamTrack): Promise<MediaSoup.Producer>;
+    consumeTrack(producerId: ProducerID): Promise<MediaSoup.Consumer>;
     private _consumerTransportPromise?;
     private _consumerTransport?;
     private consumerTransport;
@@ -58,7 +44,7 @@ export declare class SFU {
     private producerTransport;
     private sentRtpCapabilities;
     private sendRtpCapabilities;
-    request(request: Request): Promise<void | Result>;
+    private request;
     private _requestId;
     private generateRequestId;
     private onTransportStateChange;
@@ -66,6 +52,8 @@ export declare class SFU {
     private parse;
     private handleMessage;
     private response;
+    private closeTrack;
+    private setTrack;
+    private handlePauseMessage;
 }
-export {};
 //# sourceMappingURL=sfu.d.ts.map
