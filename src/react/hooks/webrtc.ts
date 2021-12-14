@@ -1,25 +1,20 @@
 import { useContext, useEffect, useMemo } from "react";
-import { useAsync, useAsyncCallback } from "react-async-hook";
+import { useAsyncCallback } from "react-async-hook";
 import { useSelector } from "react-redux";
 import { SfuID, ProducerID } from "../../network/sfu";
 import { State } from "../../redux/reducer";
 import { WebRtcContext } from "../rtcContext";
 
-
-function getUserMedia(constraints?: MediaStreamConstraints): Promise<MediaStream> {
-    console.log("getUserMedia", constraints)
-    if(navigator?.mediaDevices?.getUserMedia) { return navigator?.mediaDevices?.getUserMedia(constraints); }
-    throw new Error('Could not get user media');
-}
-
-export function useCamera(constraints?: MediaStreamConstraints) {
-    if (!constraints) {
-        constraints = {
+export function useCamera() {
+    return useAsyncCallback<MediaStream>(async (
+        constraints: MediaStreamConstraints = {
             video: true,
             audio: true,
-        };
-    }
-    return useAsync(getUserMedia, [constraints], {executeOnUpdate: false});
+        },
+    ) => {
+        if(!navigator?.mediaDevices?.getUserMedia) { throw new Error('Could not get user media'); }
+        return await navigator.mediaDevices.getUserMedia(constraints);
+    });
 }
 
 export function useWebRtcState<T = unknown>(
@@ -32,8 +27,6 @@ export function useWebRtcState<T = unknown>(
       equalityCheck
     );
 }
-  
-
 
 export function useMediaStream(sfuId: SfuID, ids: ProducerID[]) {
     //This will trigger rerenders
@@ -59,7 +52,14 @@ export function useSendMediaStream() {
     const webrtc = useContext(WebRtcContext);
     return useAsyncCallback(async (sfuId: SfuID, mediaStream: MediaStream) => {
         const tracks = mediaStream.getTracks()
-        await webrtc.sendTracks(sfuId, tracks)
+        const promises = webrtc.sendTracks(sfuId, tracks)
+        if(!promises) { return []}
+        const producers = await Promise.allSettled(promises)
+        return producers.reduce((ids: ProducerID[],result) => {
+            if(result.status !== "fulfilled") { return ids }
+            return [...ids, result.value.id as ProducerID]
+        },
+        [])
     })
 }
 

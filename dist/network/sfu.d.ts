@@ -16,6 +16,7 @@ export declare type WebRtcTransportResult = {
     iceCandidates: MediaSoup.IceCandidate[];
     iceParameters: MediaSoup.IceParameters;
     dtlsParameters: MediaSoup.DtlsParameters;
+    sctpParameters?: MediaSoup.SctpParameters;
 };
 export declare type Track = {
     producer?: MediaSoup.Producer;
@@ -32,18 +33,14 @@ export declare class SFU<ApplicationState = unknown> {
     private readonly tracks;
     private readonly promiseCompleter;
     private readonly ws;
-    constructor(id: SfuID, store: Store<ApplicationState, Action>, selector: (s: ApplicationState) => State, url?: string);
+    constructor(id: SfuID, store: Store<ApplicationState, Action>, selector: (s: ApplicationState) => State, url: string);
     getTrack(id: ProducerID): Promise<MediaStreamTrack>;
     produceTrack(track: MediaStreamTrack): Promise<MediaSoup.Producer>;
-    consumeTrack(producerId: ProducerID): Promise<MediaSoup.Consumer>;
-    private _consumerTransportPromise?;
-    private _consumerTransport?;
+    private consumeTrack;
     private consumerTransport;
-    private _producerTransportPromise?;
-    private _producerTransport?;
     private producerTransport;
-    private sentRtpCapabilities;
     private sendRtpCapabilities;
+    private loadDevice;
     private request;
     private _requestId;
     private generateRequestId;

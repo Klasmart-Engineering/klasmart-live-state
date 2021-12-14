@@ -9,7 +9,7 @@ export declare class WSTransport {
     private sendKeepAliveMessageInterval;
     private recieveTimeoutReference?;
     private sendTimeoutReference?;
-    constructor(url: string, onMessageCallback: (transport: WSTransport, data: string | ArrayBuffer | Blob) => unknown, onStateChange?: ((state: TransportState) => unknown) | undefined, protocols?: string[] | undefined, autoconnect?: boolean, recieveMessageTimeoutTime?: number, sendKeepAliveMessageInterval?: number);
+    constructor(url: string, onMessageCallback: (transport: WSTransport, data: string | ArrayBuffer | Blob) => unknown, onStateChange?: ((state: TransportState) => unknown) | undefined, protocols?: string[] | undefined, autoconnect?: boolean, recieveMessageTimeoutTime?: number | null, sendKeepAliveMessageInterval?: number | null);
     connect(): Promise<boolean>;
     disconnect(code?: number | undefined, reason?: string): void;
     send(data: string | ArrayBufferLike | Blob | ArrayBufferView): Promise<void>;

@@ -19,8 +19,8 @@ export class WSTransport {
     private readonly onStateChange?: (state: TransportState) => unknown,
     private readonly protocols: string[] | undefined = undefined,
     private autoconnect = true,
-    private recieveMessageTimeoutTime = 5000,
-    private sendKeepAliveMessageInterval = 1000 /* eslint-enable no-unused-vars */
+    private recieveMessageTimeoutTime: number|null = 5000,
+    private sendKeepAliveMessageInterval:number|null = 1000 /* eslint-enable no-unused-vars */
   ) {}
 
   public async connect() {
@@ -57,14 +57,16 @@ export class WSTransport {
   private async _connect() {
     if (!this._wsPromise || this.ws?.readyState === WebSocket.CLOSED) {
       this._wsPromise = new Promise<WebSocket>((resolve, reject) => {
-        const ws = (this.ws = new WebSocket(this.url, this.protocols));
+        const ws = new WebSocket(this.url, this.protocols);
         ws.binaryType = "arraybuffer";
         this.onStateChange?.("connecting");
         ws.addEventListener("open", () => {
           this.onOpen();
+          this.ws = ws
           resolve(ws);
         });
         ws.addEventListener("error", (e) => {
+          console.error(e)
           this.onError();
           reject(e);
         });
@@ -97,6 +99,7 @@ export class WSTransport {
   }
 
   private resetNetworkRecieveTimeout(): void {
+    if(this.recieveMessageTimeoutTime === null) { return }
     if (this.recieveTimeoutReference) {
       clearTimeout(this.recieveTimeoutReference);
     }
@@ -107,6 +110,7 @@ export class WSTransport {
   }
 
   private resetNetworkSendTimeout(): void {
+    if(this.sendKeepAliveMessageInterval === null) { return }
     if (this.sendTimeoutReference) {
       clearTimeout(this.sendTimeoutReference);
     }

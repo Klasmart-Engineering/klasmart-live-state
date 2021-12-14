@@ -9,6 +9,7 @@ export class WebRtcManager<ApplicationState = unknown> {
     public constructor(
         public readonly store: Store<ApplicationState, Action>,
         public readonly selector: (s: ApplicationState) => State,
+        public readonly getUrl: (id: SfuID) => URL,
     ) { }
 
     public async globalPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error('Not implemented') }
@@ -19,21 +20,16 @@ export class WebRtcManager<ApplicationState = unknown> {
         return ids.map(id => sfu.getTrack(id))
     }
 
-    public async recieveTrack(id: SfuID, ids: ProducerID[]) {
+    public sendTracks(id: SfuID, tracks: MediaStreamTrack[]) {
         const sfu = this.sfu(id)
-        return await Promise.allSettled(ids.map(id => sfu.consumeTrack(id)))
-    }
-
-    public async sendTracks(id: SfuID, tracks: MediaStreamTrack[]) {
-        const sfu = this.sfu(id)
-        if(!sfu) { return }
-        return await Promise.allSettled(tracks.map(t => sfu.produceTrack(t)))
+        return tracks.map(t => sfu.produceTrack(t))
     }
 
     private sfu(id: SfuID) {
         let sfu = this.sfus.get(id);
         if (!sfu) {
-            sfu = new SFU<ApplicationState>(id, this.store, this.selector)
+            const url = this.getUrl(id).toString()
+            sfu = new SFU<ApplicationState>(id, this.store, this.selector, url)
             this.sfus.set(id, sfu);
         }
         return sfu

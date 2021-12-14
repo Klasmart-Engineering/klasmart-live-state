@@ -32,9 +32,12 @@
   "author": "",
   "license": "ISC",
   "peerDependencies": {
+    "@reduxjs/toolkit": "^1.6.1",
     "@types/react": "^16.8.6 || ^17.0.0",
     "react": "^16.8.0 || ^17.0.0",
-    "react-dom": "^16.8.0 || ^17.0.0"
+    "react-async-hook": "^4.0.0",
+    "react-dom": "^16.8.0 || ^17.0.0",
+    "react-redux": "^7.2.6"
   },
   "peerDependenciesMeta": {
     "@types/react": {
@@ -42,13 +45,10 @@
     }
   },
   "dependencies": {
-    "@reduxjs/toolkit": "^1.6.1",
     "eventemitter3": "^4.0.7",
     "immer": "^9.0.6",
     "mediasoup-client": "^3.6.47",
     "nanoid": "^3.1.25",
-    "react-async-hook": "^4.0.0",
-    "react-redux": "^7.2.6",
     "redux": "^4.1.1",
     "redux-immutable": "^4.0.0"
   },
