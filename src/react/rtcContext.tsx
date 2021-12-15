@@ -1,7 +1,7 @@
-import { Store } from '@reduxjs/toolkit';
-import React from 'react';
-import { ProducerID, SFU, SfuID } from '../network/sfu';
-import { Action, State } from '../redux/reducer';
+import { Store } from "@reduxjs/toolkit";
+import React from "react";
+import { ProducerID, SFU, SfuID } from "../network/sfu";
+import { Action, State } from "../redux/reducer";
 
 export class WebRtcManager<ApplicationState = unknown> {
 
@@ -12,29 +12,29 @@ export class WebRtcManager<ApplicationState = unknown> {
         public readonly getUrl: (id: SfuID) => URL,
     ) { }
 
-    public async globalPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error('Not implemented') }
-    public async localPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error('Not implemented') }
+    public async globalPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error("Not implemented"); }
+    public async localPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error("Not implemented"); }
 
     public getTracks(id: SfuID, ids: ProducerID[]) {
-        const sfu = this.sfu(id)
-        return ids.map(id => sfu.getTrack(id))
+        const sfu = this.sfu(id);
+        return ids.map(id => sfu.getTrack(id));
     }
 
     public sendTracks(id: SfuID, tracks: MediaStreamTrack[]) {
-        const sfu = this.sfu(id)
-        return tracks.map(t => sfu.produceTrack(t))
+        const sfu = this.sfu(id);
+        return tracks.map(t => sfu.produceTrack(t));
     }
 
     private sfu(id: SfuID) {
         let sfu = this.sfus.get(id);
         if (!sfu) {
-            const url = this.getUrl(id).toString()
-            sfu = new SFU<ApplicationState>(id, this.store, this.selector, url)
+            const url = this.getUrl(id).toString();
+            sfu = new SFU<ApplicationState>(id, this.store, this.selector, url);
             this.sfus.set(id, sfu);
         }
-        return sfu
+        return sfu;
     }
 }
 
 export const WebRtcContext = React.createContext<WebRtcManager>(null as any);
-WebRtcContext.displayName = 'KidsloopLiveWebRTC';
+WebRtcContext.displayName = "KidsloopLiveWebRTC";

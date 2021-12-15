@@ -1,9 +1,9 @@
 import { useContext, useEffect } from "react";
 import {
-  ClassActionType,
-  ClassActionTypeToPayload,
-  NetworkContext,
-  State,
+    ClassActionType,
+    ClassActionTypeToPayload,
+    NetworkContext,
+    State,
 } from "../../ui";
 
 export type NetworkHandlerCallback<T extends ClassActionType> = (
@@ -12,10 +12,10 @@ export type NetworkHandlerCallback<T extends ClassActionType> = (
 ) => unknown;
 
 export function useNetworkHandler<T extends ClassActionType = ClassActionType>(
-  actionType: T,
-  callback: NetworkHandlerCallback<T>
+    actionType: T,
+    callback: NetworkHandlerCallback<T>
 ) {
-  const network = useContext(NetworkContext);
-  // TODO: How to accomodate additional Action types, other than ClassAction
-  useEffect(() => network.onClassAction(actionType, callback), [network]);
+    const network = useContext(NetworkContext);
+    // TODO: How to accommodate additional Action types, other than ClassAction
+    useEffect(() => network.onClassAction(actionType, callback), [network]);
 }

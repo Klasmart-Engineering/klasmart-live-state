@@ -11,15 +11,15 @@ export interface WebRtcProviderProps<ApplicationState = unknown> {
 }
 
 export function WebRtcProvider<ApplicationState = unknown>({
-  children,
-  selector,
-  getSfuUrl,
+    children,
+    selector,
+    getSfuUrl,
 }: WebRtcProviderProps) {
-  const store = useStore<ApplicationState, Action>();
-  const value = useMemo(() => new WebRtcManager(store, selector, getSfuUrl), []);
-  return (
-    <WebRtcContext.Provider value={value as WebRtcManager<unknown>}>
-      {children}
-    </WebRtcContext.Provider>
-  );
+    const store = useStore<ApplicationState, Action>();
+    const value = useMemo(() => new WebRtcManager(store, selector, getSfuUrl), []);
+    return (
+        <WebRtcContext.Provider value={value as WebRtcManager<unknown>}>
+            {children}
+        </WebRtcContext.Provider>
+    );
 }

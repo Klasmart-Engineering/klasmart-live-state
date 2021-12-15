@@ -6,10 +6,10 @@ export type TransportState =
   | "connecting"
   | "error";
 export class WSTransport {
-  private recieveTimeoutReference?: Timeout;
-  private sendTimeoutReference?: Timeout;
+    private receiveTimeoutReference?: Timeout;
+    private sendTimeoutReference?: Timeout;
 
-  constructor(
+    constructor(
     /* eslint-disable no-unused-vars */
     private readonly url: string,
     private readonly onMessageCallback: (
@@ -19,104 +19,104 @@ export class WSTransport {
     private readonly onStateChange?: (state: TransportState) => unknown,
     private readonly protocols: string[] | undefined = undefined,
     private autoconnect = true,
-    private recieveMessageTimeoutTime: number|null = 5000,
+    private receiveMessageTimeoutTime: number|null = 5000,
     private sendKeepAliveMessageInterval:number|null = 1000 /* eslint-enable no-unused-vars */
-  ) {}
+    ) {}
 
-  public async connect() {
-    return this._connect().then(
-      () => true,
-      () => false
-    );
-  }
-
-  public disconnect(code?: number | undefined, reason?: string): void {
-    this.ws?.close(code, reason);
-    if (this.recieveTimeoutReference) {
-      clearTimeout(this.recieveTimeoutReference);
+    public async connect() {
+        return this._connect().then(
+            () => true,
+            () => false
+        );
     }
-    if (this.sendTimeoutReference) {
-      clearTimeout(this.sendTimeoutReference);
+
+    public disconnect(code?: number | undefined, reason?: string): void {
+        this.ws?.close(code, reason);
+        if (this.receiveTimeoutReference) {
+            clearTimeout(this.receiveTimeoutReference);
+        }
+        if (this.sendTimeoutReference) {
+            clearTimeout(this.sendTimeoutReference);
+        }
     }
-  }
 
-  public async send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
-    let ws = this.ws;
-    if (!ws) {
-      if (!this.autoconnect) {
-        throw new Error("Not connected");
-      }
-      ws = await this._connect();
+    public async send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+        let ws = this.ws;
+        if (!ws) {
+            if (!this.autoconnect) {
+                throw new Error("Not connected");
+            }
+            ws = await this._connect();
+        }
+        ws.send(data);
+        this.resetNetworkSendTimeout();
     }
-    ws.send(data);
-    this.resetNetworkSendTimeout();
-  }
 
-  private ws?: WebSocket;
-  private _wsPromise?: Promise<WebSocket>;
-  private async _connect() {
-    if (!this._wsPromise || this.ws?.readyState === WebSocket.CLOSED) {
-      this._wsPromise = new Promise<WebSocket>((resolve, reject) => {
-        const ws = new WebSocket(this.url, this.protocols);
-        ws.binaryType = "arraybuffer";
-        this.onStateChange?.("connecting");
-        ws.addEventListener("open", () => {
-          this.onOpen();
-          this.ws = ws
-          resolve(ws);
-        });
-        ws.addEventListener("error", (e) => {
-          console.error(e)
-          this.onError();
-          reject(e);
-        });
-        ws.addEventListener("close", () => this.onClose());
-        ws.addEventListener("message", (e) => this.onMessage(e.data));
-      });
+    private ws?: WebSocket;
+    private _wsPromise?: Promise<WebSocket>;
+    private async _connect() {
+        if (!this._wsPromise || this.ws?.readyState === WebSocket.CLOSED) {
+            this._wsPromise = new Promise<WebSocket>((resolve, reject) => {
+                const ws = new WebSocket(this.url, this.protocols);
+                ws.binaryType = "arraybuffer";
+                this.onStateChange?.("connecting");
+                ws.addEventListener("open", () => {
+                    this.onOpen();
+                    this.ws = ws;
+                    resolve(ws);
+                });
+                ws.addEventListener("error", (e) => {
+                    console.error(e);
+                    this.onError();
+                    reject(e);
+                });
+                ws.addEventListener("close", () => this.onClose());
+                ws.addEventListener("message", (e) => this.onMessage(e.data));
+            });
+        }
+        return this._wsPromise;
     }
-    return this._wsPromise;
-  }
 
-  private onMessage(data: string | ArrayBuffer | Blob) {
-    this.resetNetworkRecieveTimeout();
-    this.onMessageCallback(this, data);
-  }
-
-  private onOpen() {
-    this.resetNetworkSendTimeout();
-    this.resetNetworkRecieveTimeout();
-    this.onStateChange?.("connected");
-  }
-
-  private onClose() {
-    this.ws = undefined;
-    this._wsPromise = undefined;
-    this.onStateChange?.("not-connected");
-  }
-
-  private onError() {
-    this.onStateChange?.("error");
-  }
-
-  private resetNetworkRecieveTimeout(): void {
-    if(this.recieveMessageTimeoutTime === null) { return }
-    if (this.recieveTimeoutReference) {
-      clearTimeout(this.recieveTimeoutReference);
+    private onMessage(data: string | ArrayBuffer | Blob) {
+        this.resetNetworkRecieveTimeout();
+        this.onMessageCallback(this, data);
     }
-    this.recieveTimeoutReference = setTimeout(
-      () => this.disconnect(4400, "timeout"),
-      this.recieveMessageTimeoutTime
-    );
-  }
 
-  private resetNetworkSendTimeout(): void {
-    if(this.sendKeepAliveMessageInterval === null) { return }
-    if (this.sendTimeoutReference) {
-      clearTimeout(this.sendTimeoutReference);
+    private onOpen() {
+        this.resetNetworkSendTimeout();
+        this.resetNetworkRecieveTimeout();
+        this.onStateChange?.("connected");
     }
-    this.sendTimeoutReference = setTimeout(
-      () => this.send(new Uint8Array(0)),
-      this.sendKeepAliveMessageInterval
-    );
-  }
+
+    private onClose() {
+        this.ws = undefined;
+        this._wsPromise = undefined;
+        this.onStateChange?.("not-connected");
+    }
+
+    private onError() {
+        this.onStateChange?.("error");
+    }
+
+    private resetNetworkRecieveTimeout(): void {
+        if(this.receiveMessageTimeoutTime === null) { return; }
+        if (this.receiveTimeoutReference) {
+            clearTimeout(this.receiveTimeoutReference);
+        }
+        this.receiveTimeoutReference = setTimeout(
+            () => this.disconnect(4400, "timeout"),
+            this.receiveMessageTimeoutTime
+        );
+    }
+
+    private resetNetworkSendTimeout(): void {
+        if(this.sendKeepAliveMessageInterval === null) { return; }
+        if (this.sendTimeoutReference) {
+            clearTimeout(this.sendTimeoutReference);
+        }
+        this.sendTimeoutReference = setTimeout(
+            () => this.send(new Uint8Array(0)),
+            this.sendKeepAliveMessageInterval
+        );
+    }
 }

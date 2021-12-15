@@ -11,14 +11,14 @@ export interface NetworkProviderProps<ApplicationState = unknown> {
 
 // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 export function NetworkProvider<ApplicationState = unknown>({
-  children,
-  selector,
+    children,
+    selector,
 }: NetworkProviderProps<ApplicationState>) {
-  const store = useStore<ApplicationState, Action>();
-  const value = useMemo(() => new Network(store, selector), [store, selector]);
-  return (
-    <NetworkContext.Provider value={value as Network<unknown>}>
-      {children}
-    </NetworkContext.Provider>
-  );
+    const store = useStore<ApplicationState, Action>();
+    const value = useMemo(() => new Network(store, selector), [store, selector]);
+    return (
+        <NetworkContext.Provider value={value as Network<unknown>}>
+            {children}
+        </NetworkContext.Provider>
+    );
 }
