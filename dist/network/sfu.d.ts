@@ -46,11 +46,12 @@ export declare class SFU<ApplicationState = unknown> {
     private generateRequestId;
     private onTransportStateChange;
     private onTransportMessage;
-    private parse;
+    private static parse;
     private handleMessage;
     private response;
     private closeTrack;
     private setTrack;
     private handlePauseMessage;
+    private static ExecuteOnce;
 }
 //# sourceMappingURL=sfu.d.ts.map

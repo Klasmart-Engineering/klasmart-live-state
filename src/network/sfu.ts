@@ -21,12 +21,12 @@ type Request = {
   producerTransport?: unknown;
   producerTransportConnect?: { dtlsParameters: MediaSoup.DtlsParameters };
   createTrack?: { kind: MediaSoup.MediaKind, rtpParameters: MediaSoup.RtpParameters };
-  
+
   rtpCapabilities?: MediaSoup.RtpCapabilities;
   consumerTransport?: unknown;
   consumerTransportConnect?: { dtlsParameters: MediaSoup.DtlsParameters };
   createConsumer?: { producerId: ProducerID };
-  
+
   locallyPause?: { paused: boolean, id: ProducerID };
   globallyPause?: { paused: boolean, id: ProducerID };
   end?: unknown;
@@ -105,9 +105,9 @@ export class SFU<ApplicationState = unknown> {
       null,
       null,
     )
-    this.ws.connect()
+    this.ws.connect().catch(e => console.error(e))
   }
-  
+
 
   public async getTrack(id: ProducerID) {
     const track = this.tracks.get(id)
@@ -144,8 +144,8 @@ export class SFU<ApplicationState = unknown> {
     const consumerTransport = await this.consumerTransport()
     await this.sendRtpCapabilities()
     const response = await this.request({ createConsumer: { producerId } })
-    if (!response) { throw new Error(`Recieved empty response from SFU when trying to consume producerId(${producerId})`) }
-    if (!response.consumerCreated) { throw new Error(`Recieved response without consumer parameters from SFU when trying to consume producerId(${producerId})`) }
+    if (!response) { throw new Error(`Received empty response from SFU when trying to consume producerId(${producerId})`) }
+    if (!response.consumerCreated) { throw new Error(`Received response without consumer parameters from SFU when trying to consume producerId(${producerId})`) }
 
     const consumer = await consumerTransport.consume(response.consumerCreated)
     consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s Transport(${consumerTransport.id}) closed`));
@@ -159,7 +159,8 @@ export class SFU<ApplicationState = unknown> {
     return consumer
   }
 
-  private consumerTransport = asyncLazyInitialize<MediaSoup.Transport>(async () => {
+  @SFU.ExecuteOnce()
+  private async consumerTransport(){
     const response = await this.request({ consumerTransport: {} })
     if (!response) { throw new Error('Empty response from SFU') }
     const { consumerTransport } = response
@@ -171,9 +172,10 @@ export class SFU<ApplicationState = unknown> {
       this.store.dispatch(action)
     })
     return transport
-  })
+  }
 
-  private producerTransport = asyncLazyInitialize<MediaSoup.Transport>(async () => {
+  @SFU.ExecuteOnce()
+  private async producerTransport(){
     await this.loadDevice()
     const result = await this.request({ producerTransport: {} })
     if (!result) { throw new Error('Empty response from SFU'); }
@@ -187,21 +189,23 @@ export class SFU<ApplicationState = unknown> {
       this.store.dispatch(action)
     })
     return transport
-  })
+  }
 
 
-  private sendRtpCapabilities = asyncLazyInitialize(async () => {
+  @SFU.ExecuteOnce()
+  private async sendRtpCapabilities() {
     const { rtpCapabilities } = this.device
     await this.request({ rtpCapabilities })
-  })
+  }
 
-  private loadDevice = asyncLazyInitialize<void>(async () => {
+  @SFU.ExecuteOnce()
+  private async loadDevice(){
     const response = await this.request({routerRtpCapabilities: {}})
     if (!response) { throw new Error('Empty routerRtpCapabilities response from SFU'); }
     const routerRtpCapabilities = response.routerRtpCapabilities
     if(!routerRtpCapabilities) { throw new Error('Response from SFU does not contain routerRtpCapabilities'); }
     await this.device.load({routerRtpCapabilities})
-  })
+  }
 
   private async request(request: Request) {
     const id = this.generateRequestId()
@@ -213,19 +217,17 @@ export class SFU<ApplicationState = unknown> {
   private _requestId = 0
   private generateRequestId() { return `${this._requestId++}` as RequestID; }
 
-  private onTransportStateChange(state: TransportState) { }
-
-  private onTransportMessage(data: string | ArrayBuffer | Blob) {
-    const message = this.parse(data)
-    if (!message) { this.ws.disconnect(4400); return }
-    try {
-      this.handleMessage(message)
-    } catch (e: unknown) {
-      console.error(e);
-    }
+  private onTransportStateChange(state: TransportState) {
+    console.log(`Transport state changed to ${state}`)
   }
 
-  private parse(data: string | ArrayBuffer | Blob): ResponseMessage | undefined {
+  private onTransportMessage(data: string | ArrayBuffer | Blob) {
+    const message = SFU.parse(data)
+    if (!message) { this.ws.disconnect(4400); return }
+    this.handleMessage(message).catch(e => console.error(e));
+  }
+
+  private static parse(data: string | ArrayBuffer | Blob): ResponseMessage | undefined {
     if (typeof data !== "string") { return; }
     const response = JSON.parse(data.toString()) as ResponseMessage;
     if (typeof response !== "object" || !response) { return; }
@@ -281,13 +283,22 @@ export class SFU<ApplicationState = unknown> {
     const action = webrtcSlice.actions.setTrack({ id: this.id, producerId, status: { localPause, globalPause } })
     this.store.dispatch(action)
   }
-}
 
-
-function asyncLazyInitialize<T, I=void>(init: (i: I) => Promise<T>) {
-  let value: Promise<T>
-  return (i: I) => {
-    if(!value) { value = new Promise((resolve, reject) => init(i).then(resolve, reject)) }
-    return value
+  /// Decorator that ensures the decorated method body is executed only once.  All subsequent calls return the same value as the first call.
+  private static ExecuteOnce() {
+    return (_target: object, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+      const childFunction = descriptor.value;
+      if (typeof childFunction !== "function") {
+        throw new TypeError(`Only methods can be decorated with @ExecuteOnce.  Property ${String(propertyKey)} is not a method.`);
+      }
+      descriptor.value = function (this: SFU, ...args: never[]) {
+        let value: Promise<unknown> | undefined;
+        if (!value) {
+          value = new Promise((resolve, reject) => childFunction.apply(this, args).then(resolve, reject));
+        }
+        return value
+      };
+      return descriptor;
+    };
   }
 }
