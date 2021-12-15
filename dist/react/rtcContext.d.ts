@@ -1,7 +1,7 @@
-import { Store } from '@reduxjs/toolkit';
-import React from 'react';
-import { ProducerID, SfuID } from '../network/sfu';
-import { Action, State } from '../redux/reducer';
+import { Store } from "@reduxjs/toolkit";
+import React from "react";
+import { ProducerID, SfuID } from "../network/sfu";
+import { Action, State } from "../redux/reducer";
 export declare class WebRtcManager<ApplicationState = unknown> {
     readonly store: Store<ApplicationState, Action>;
     readonly selector: (s: ApplicationState) => State;

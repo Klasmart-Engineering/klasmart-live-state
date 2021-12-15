@@ -5,11 +5,11 @@ export declare class WSTransport {
     private readonly onStateChange?;
     private readonly protocols;
     private autoconnect;
-    private recieveMessageTimeoutTime;
+    private receiveMessageTimeoutTime;
     private sendKeepAliveMessageInterval;
-    private recieveTimeoutReference?;
+    private receiveTimeoutReference?;
     private sendTimeoutReference?;
-    constructor(url: string, onMessageCallback: (transport: WSTransport, data: string | ArrayBuffer | Blob) => unknown, onStateChange?: ((state: TransportState) => unknown) | undefined, protocols?: string[] | undefined, autoconnect?: boolean, recieveMessageTimeoutTime?: number | null, sendKeepAliveMessageInterval?: number | null);
+    constructor(url: string, onMessageCallback: (transport: WSTransport, data: string | ArrayBuffer | Blob) => unknown, onStateChange?: ((state: TransportState) => unknown) | undefined, protocols?: string[] | undefined, autoconnect?: boolean, receiveMessageTimeoutTime?: number | null, sendKeepAliveMessageInterval?: number | null);
     connect(): Promise<boolean>;
     disconnect(code?: number | undefined, reason?: string): void;
     send(data: string | ArrayBufferLike | Blob | ArrayBufferView): Promise<void>;

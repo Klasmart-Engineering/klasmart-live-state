@@ -12,75 +12,76 @@ export type ConsumerID = NewType<string, "consumerId">
 export type RequestID = NewType<string, "requestId">
 
 type RequestMessage = {
-  id: RequestID,
-  request: Request,
+    id: RequestID,
+    request: Request,
 }
 
 type Request = {
-  routerRtpCapabilities?: unknown;
-  producerTransport?: unknown;
-  producerTransportConnect?: { dtlsParameters: MediaSoup.DtlsParameters };
-  createTrack?: { kind: MediaSoup.MediaKind, rtpParameters: MediaSoup.RtpParameters };
+    routerRtpCapabilities?: unknown;
+    producerTransport?: unknown;
+    producerTransportConnect?: { dtlsParameters: MediaSoup.DtlsParameters };
+    createTrack?: { kind: MediaSoup.MediaKind, rtpParameters: MediaSoup.RtpParameters };
 
-  rtpCapabilities?: MediaSoup.RtpCapabilities;
-  consumerTransport?: unknown;
-  consumerTransportConnect?: { dtlsParameters: MediaSoup.DtlsParameters };
-  createConsumer?: { producerId: ProducerID };
+    rtpCapabilities?: MediaSoup.RtpCapabilities;
+    consumerTransport?: unknown;
+    consumerTransportConnect?: { dtlsParameters: MediaSoup.DtlsParameters };
+    createConsumer?: { producerId: ProducerID };
 
-  locallyPause?: { paused: boolean, id: ProducerID };
-  globallyPause?: { paused: boolean, id: ProducerID };
-  end?: unknown;
+    locallyPause?: { paused: boolean, id: ProducerID };
+    globallyPause?: { paused: boolean, id: ProducerID };
+    end?: unknown;
 }
 
 type Response = {
-  id: RequestID;
-  error: string,
+    id: RequestID;
+    error: string,
 } | {
-  id: RequestID;
-  result: Result | void,
+    id: RequestID;
+    result: Result | void,
 }
 
 type ResponseMessage = {
-  response?: Response,
-  consumerPaused?: PauseMessage,
-  producerPaused?: PauseMessage,
-  consumerClosed?: ProducerID
-  producerClosed?: ProducerID
+    response?: Response,
+    consumerPaused?: PauseMessage,
+    producerPaused?: PauseMessage,
+    consumerClosed?: ProducerID
+    producerClosed?: ProducerID
 }
 
 export type PauseMessage = {
-  id: ProducerID,
-  localPause: boolean,
-  globalPause: boolean,
+    id: ProducerID,
+    localPause: boolean,
+    globalPause: boolean,
 }
 
 export type WebRtcTransportResult = {
-  id: string,
-  iceCandidates: MediaSoup.IceCandidate[],
-  iceParameters: MediaSoup.IceParameters,
-  dtlsParameters: MediaSoup.DtlsParameters,
-  sctpParameters?: MediaSoup.SctpParameters,
+    id: string,
+    iceCandidates: MediaSoup.IceCandidate[],
+    iceParameters: MediaSoup.IceParameters,
+    dtlsParameters: MediaSoup.DtlsParameters,
+    sctpParameters?: MediaSoup.SctpParameters,
 }
 
 
 type Result = {
-  routerRtpCapabilities?: MediaSoup.RtpCapabilities;
-  producerTransport?: WebRtcTransportResult;
-  consumerTransport?: WebRtcTransportResult;
-  consumerCreated?: {
-    id: ConsumerID,
-    producerId: ProducerID,
-    kind: MediaSoup.MediaKind,
-    rtpParameters: MediaSoup.RtpParameters,
-    paused: boolean,
-  },
+    routerRtpCapabilities?: MediaSoup.RtpCapabilities;
+    producerTransport?: WebRtcTransportResult;
+    createTrack?: ProducerID
+    consumerTransport?: WebRtcTransportResult;
+    consumerCreated?: {
+        id: ConsumerID,
+        producerId: ProducerID,
+        kind: MediaSoup.MediaKind,
+        rtpParameters: MediaSoup.RtpParameters,
+        paused: boolean,
+    },
 }
 
 export type Track = {
-  producer?: MediaSoup.Producer
-  consumer?: MediaSoup.Consumer
-  localPause: boolean
-  globalPause: boolean
+    producer?: MediaSoup.Producer
+    consumer?: MediaSoup.Consumer
+    localPause: boolean
+    globalPause: boolean
 }
 
 export class SFU<ApplicationState = unknown> {
@@ -91,10 +92,10 @@ export class SFU<ApplicationState = unknown> {
     private readonly ws: WSTransport;
 
     public constructor(
-    private readonly id: SfuID,
-    private readonly store: Store<ApplicationState, Action>,
-    private readonly selector: (s: ApplicationState) => State,
-    readonly url: string,
+        private readonly id: SfuID,
+        private readonly store: Store<ApplicationState, Action>,
+        private readonly selector: (s: ApplicationState) => State,
+        readonly url: string,
     ) {
         this.ws = new WSTransport(
             url,
@@ -112,7 +113,7 @@ export class SFU<ApplicationState = unknown> {
     public async getTrack(id: ProducerID) {
         const track = this.tracks.get(id);
         const mediaTrack = track?.producer?.track || track?.consumer?.track;
-        if(mediaTrack) {return mediaTrack;}
+        if (mediaTrack) { return mediaTrack; }
         const consumer = await this.consumeTrack(id);
         return consumer.track;
     }
@@ -120,15 +121,13 @@ export class SFU<ApplicationState = unknown> {
     public async produceTrack(track: MediaStreamTrack) {
         const producerTransport = await this.producerTransport();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
-        if(!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
-        console.log("produceTrack", track);
+        if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
         const producer = await producerTransport.produce({
             track,
             zeroRtpOnPause: true,
             disableTrackOnPause: true,
             stopTracks: true,
         });
-        console.log("producer", producer);
         producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport(${producerTransport.id}) closed`));
         producer.on("trackended", () => console.log(`Producer(${producer.id}) ended`));
 
@@ -159,8 +158,8 @@ export class SFU<ApplicationState = unknown> {
         return consumer;
     }
 
-  @SFU.ExecuteOnce()
-    private async consumerTransport(){
+    @ExecuteOnce()
+    private async consumerTransport() {
         const response = await this.request({ consumerTransport: {} });
         if (!response) { throw new Error("Empty response from SFU"); }
         const { consumerTransport } = response;
@@ -174,131 +173,152 @@ export class SFU<ApplicationState = unknown> {
         return transport;
     }
 
-  @SFU.ExecuteOnce()
-  private async producerTransport(){
-      await this.loadDevice();
-      const result = await this.request({ producerTransport: {} });
-      if (!result) { throw new Error("Empty response from SFU"); }
-      const { producerTransport } = result;
-      if (!producerTransport) { throw new Error("Response from SFU does not contain producer transport"); }
-      const transport = this.device.createSendTransport(producerTransport);
-      transport.on("connect", (producerTransportConnect, callback, error) => this.request({ producerTransportConnect }).then(callback, error));
-      transport.on("produce", (createTrack) => this.request({ createTrack }));
-      transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
-          const action = webrtcSlice.actions.setProducerConnectionStatus({ id: this.id, connectionState });
-          this.store.dispatch(action);
-      });
-      return transport;
-  }
+    @ExecuteOnce()
+    private async producerTransport() {
+        await this.loadDevice();
+        const result = await this.request({ producerTransport: {} });
+        if (!result) { throw new Error("Empty response from SFU"); }
+        const { producerTransport } = result;
+        if (!producerTransport) { throw new Error("Response from SFU does not contain producer transport"); }
+        const transport = this.device.createSendTransport(producerTransport);
+        transport.on("connect", (producerTransportConnect, callback, error) => this.request({ producerTransportConnect }).then(callback, error));
+        transport.on("produce", async (createTrack, callback, error) => {
+            try {
+                const response = await this.request({ createTrack })
+                if(!response) { return error('Empty response from SFU'); }
+                const id = response.createTrack
+                if(!response.createTrack) { return error('Empty response from SFU'); }
+                callback({id})
+            } catch(e) {
+                error(e)
+            }
+        });
+        transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
+            const action = webrtcSlice.actions.setProducerConnectionStatus({ id: this.id, connectionState });
+            this.store.dispatch(action);
+        });
+        return transport;
+    }
 
 
-  @SFU.ExecuteOnce()
-  private async sendRtpCapabilities() {
-      const { rtpCapabilities } = this.device;
-      await this.request({ rtpCapabilities });
-  }
+    @ExecuteOnce()
+    private async sendRtpCapabilities() {
+        const { rtpCapabilities } = this.device;
+        await this.request({ rtpCapabilities });
+    }
 
-  @SFU.ExecuteOnce()
-  private async loadDevice(){
-      const response = await this.request({routerRtpCapabilities: {}});
-      if (!response) { throw new Error("Empty routerRtpCapabilities response from SFU"); }
-      const routerRtpCapabilities = response.routerRtpCapabilities;
-      if(!routerRtpCapabilities) { throw new Error("Response from SFU does not contain routerRtpCapabilities"); }
-      await this.device.load({routerRtpCapabilities});
-  }
+    @ExecuteOnce()
+    private async loadDevice() {
+        const response = await this.request({ routerRtpCapabilities: {} });
+        if (!response) { throw new Error("Empty routerRtpCapabilities response from SFU"); }
+        const routerRtpCapabilities = response.routerRtpCapabilities;
+        if (!routerRtpCapabilities) { throw new Error("Response from SFU does not contain routerRtpCapabilities"); }
+        await this.device.load({ routerRtpCapabilities });
+    }
 
-  private async request(request: Request) {
-      const id = this.generateRequestId();
-      const message: RequestMessage = { id, request };
-      await this.ws.send(JSON.stringify(message));
-      return this.promiseCompleter.createPromise(id);
-  }
+    private async request(request: Request) {
+        const id = this.generateRequestId();
+        const message: RequestMessage = { id, request };
+        await this.ws.send(JSON.stringify(message));
+        return this.promiseCompleter.createPromise(id);
+    }
 
-  private _requestId = 0;
-  private generateRequestId() { return `${this._requestId++}` as RequestID; }
+    private _requestId = 0;
+    private generateRequestId() { return `${this._requestId++}` as RequestID; }
 
-  private onTransportStateChange(state: TransportState) {
-      console.log(`Transport state changed to ${state}`);
-  }
+    private onTransportStateChange(state: TransportState) {
+        console.log(`Transport state changed to ${state}`);
+    }
 
-  private onTransportMessage(data: string | ArrayBuffer | Blob) {
-      const message = SFU.parse(data);
-      if (!message) { this.ws.disconnect(4400); return; }
-      this.handleMessage(message).catch(e => console.error(e));
-  }
+    private onTransportMessage(data: string | ArrayBuffer | Blob) {
+        const message = SFU.parse(data);
+        if (!message) { this.ws.disconnect(4400); return; }
+        this.handleMessage(message).catch(e => console.error(e));
+    }
 
-  private static parse(data: string | ArrayBuffer | Blob): ResponseMessage | undefined {
-      if (typeof data !== "string") { return; }
-      const response = JSON.parse(data.toString()) as ResponseMessage;
-      if (typeof response !== "object" || !response) { return; }
-      return response;
-  }
+    private static parse(data: string | ArrayBuffer | Blob): ResponseMessage | undefined {
+        if (typeof data !== "string") { return; }
+        const response = JSON.parse(data.toString()) as ResponseMessage;
+        if (typeof response !== "object" || !response) { return; }
+        return response;
+    }
 
-  private async handleMessage(message: ResponseMessage) {
-      if (message.response) { this.response(message.response); }
-      if (message.consumerPaused) { this.handlePauseMessage(message.consumerPaused); }
-      if (message.producerPaused) { this.handlePauseMessage(message.producerPaused); }
+    private async handleMessage(message: ResponseMessage) {
+        if (message.response) { this.response(message.response); }
+        if (message.consumerPaused) { this.handlePauseMessage(message.consumerPaused); }
+        if (message.producerPaused) { this.handlePauseMessage(message.producerPaused); }
 
-      //Assumes that the user can't have both a producer and consumer for the same track
-      if (message.consumerClosed) { this.closeTrack(message.consumerClosed); }
-      if (message.producerClosed) { this.closeTrack(message.producerClosed); }
-  }
+        //Assumes that the user can't have both a producer and consumer for the same track
+        if (message.consumerClosed) { this.closeTrack(message.consumerClosed); }
+        if (message.producerClosed) { this.closeTrack(message.producerClosed); }
+    }
 
-  private response(response: Response) {
-      const { id } = response;
-      if ("error" in response) {
-          this.promiseCompleter.reject(id, response.error);
-      } else {
-          this.promiseCompleter.resolve(id, response.result);
-      }
-  }
+    private response(response: Response) {
+        const { id } = response;
+        if ("error" in response) {
+            this.promiseCompleter.reject(id, response.error);
+        } else {
+            this.promiseCompleter.resolve(id, response.result);
+        }
+    }
 
-  private closeTrack(producerId: ProducerID) {
-      this.tracks.delete(producerId);
+    private closeTrack(producerId: ProducerID) {
+        this.tracks.delete(producerId);
 
-      const action = webrtcSlice.actions.closeTrack({ id: this.id, producerId });
-      this.store.dispatch(action);
-  }
+        const action = webrtcSlice.actions.closeTrack({ id: this.id, producerId });
+        this.store.dispatch(action);
+    }
 
-  private setTrack(producerId: ProducerID, track: Track) {
-      this.tracks.set(producerId, track);
-      const action = webrtcSlice.actions.setTrack({
-          id: this.id,
-          producerId,
-          status: {
-              localPause: track.localPause,
-              globalPause: track.globalPause
-          }
-      });
-      this.store.dispatch(action);
-  }
+    private setTrack(producerId: ProducerID, track: Track) {
+        this.tracks.set(producerId, track);
+        const action = webrtcSlice.actions.setTrack({
+            id: this.id,
+            producerId,
+            status: {
+                localPause: track.localPause,
+                globalPause: track.globalPause
+            }
+        });
+        this.store.dispatch(action);
+    }
 
-  private handlePauseMessage({ id: producerId, localPause, globalPause }: PauseMessage) {
-      const track = this.tracks.get(producerId);
-      if (!track) { return console.error(`Could not find Track(${producerId}) to pause/resume producer`); }
+    private handlePauseMessage({ id: producerId, localPause, globalPause }: PauseMessage) {
+        const track = this.tracks.get(producerId);
+        if (!track) { return console.error(`Could not find Track(${producerId}) to pause/resume producer`); }
 
-      track.localPause = localPause;
-      track.globalPause = globalPause;
+        track.localPause = localPause;
+        track.globalPause = globalPause;
 
-      const action = webrtcSlice.actions.setTrack({ id: this.id, producerId, status: { localPause, globalPause } });
-      this.store.dispatch(action);
-  }
+        const action = webrtcSlice.actions.setTrack({ id: this.id, producerId, status: { localPause, globalPause } });
+        this.store.dispatch(action);
+    }
+}
 
-  /// Decorator that ensures the decorated method body is executed only once.  All subsequent calls return the same value as the first call.
-  private static ExecuteOnce() {
-      return (_target: object, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-          const childFunction = descriptor.value;
-          if (typeof childFunction !== "function") {
-              throw new TypeError(`Only methods can be decorated with @ExecuteOnce.  Property ${String(propertyKey)} is not a method.`);
-          }
-          descriptor.value = function (this: SFU, ...args: never[]) {
-              let value: Promise<unknown> | undefined;
-              if (!value) {
-                  value = new Promise((resolve, reject) => childFunction.apply(this, args).then(resolve, reject));
-              }
-              return value;
-          };
-          return descriptor;
-      };
-  }
+/**
+ *  Decorator that ensures the decorated function body is executed only once, unless the function throws an error.
+ *  All subsequent calls return the same value as the first call
+ **/
+function ExecuteOnce() {
+    return (_target: object, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+        const childFunction = descriptor.value;
+        if (typeof childFunction !== "function") {
+            throw new TypeError(`Only methods can be decorated with @ExecuteOnce.  Property ${String(propertyKey)} is not a method.`);
+        }
+        let shouldReturnCache = false
+        let cache: unknown;
+        descriptor.value = function (...args: any[]) {
+            if(shouldReturnCache) { return cache }
+            try {
+                const result = cache = childFunction.apply(this, args);
+                shouldReturnCache = true
+                if(result instanceof Promise) { result.catch(() => shouldReturnCache = false) }
+                return result
+            } catch (e) {
+                shouldReturnCache = false
+                throw e
+            }
+
+        };
+        return descriptor;
+    };
 }

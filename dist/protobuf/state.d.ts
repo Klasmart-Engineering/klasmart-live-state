@@ -1,5 +1,5 @@
-import { IChatMessage, IClassState, IContent, IDevice, ITrophy, IUser } from '.';
-import { Content, ContentType, DeviceState, Trophy, ChatMessageState, ClassState, UserState } from '../models';
+import { IChatMessage, IClassState, IContent, IDevice, ITrophy, IUser } from ".";
+import { Content, ContentType, DeviceState, Trophy, ChatMessageState, ClassState, UserState } from "../models";
 export declare function validateChatMessage({ text, timestamp, userId }: IChatMessage): ChatMessageState | undefined;
 export declare function validateContentType(content: string): ContentType | undefined;
 export declare function validateContent(content: IContent): Content | undefined;

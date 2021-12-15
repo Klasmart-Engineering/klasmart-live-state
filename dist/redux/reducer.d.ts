@@ -1,7 +1,7 @@
-import { ValueOf } from '../types';
-import { ClassAction } from './class';
-import { NetworkAction } from './network';
-import { webrtcSlice } from './sfu';
+import { ValueOf } from "../types";
+import { ClassAction } from "./class";
+import { NetworkAction } from "./network";
+import { webrtcSlice } from "./sfu";
 export declare const reducer: import("redux").Reducer<import("redux").CombinedState<{
     class: import("../models").ClassState;
     network: import("redux").CombinedState<{

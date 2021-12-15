@@ -1,5 +1,5 @@
 import { types as MediaSoup } from "mediasoup-client";
-import { NewType } from '../types';
+import { NewType } from "../types";
 import { Store } from "@reduxjs/toolkit";
 import { Action, State } from "../redux/reducer";
 export declare type SfuID = NewType<string, "sfuId">;
@@ -52,6 +52,5 @@ export declare class SFU<ApplicationState = unknown> {
     private closeTrack;
     private setTrack;
     private handlePauseMessage;
-    private static ExecuteOnce;
 }
 //# sourceMappingURL=sfu.d.ts.map

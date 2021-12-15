@@ -1,12 +1,12 @@
-import { IChatMessage, IClassState, IContent, IDevice, ITrophy, IUser } from '.';
-import { Content, ContentType, newDeviceId, DeviceState, Trophy, newUserId, newWebRtcStreamId, newActivityStreamId, newTimestamp, ChatMessageState, ClassState, DeviceID, UserState, newUserRole, UserID, newTrophyType } from '../models';
-import { values } from '../types';
+import { IChatMessage, IClassState, IContent, IDevice, ITrophy, IUser } from ".";
+import { Content, ContentType, newDeviceId, DeviceState, Trophy, newUserId, newWebRtcStreamId, newActivityStreamId, newTimestamp, ChatMessageState, ClassState, DeviceID, UserState, newUserRole, UserID, newTrophyType } from "../models";
+import { values } from "../types";
 
 
 export function validateChatMessage({text,timestamp,userId}: IChatMessage): ChatMessageState | undefined {
-    if(!text) { console.error('IChatMessage is missing text'); return; }
-    if(!timestamp) { console.error('IChatMessage is missing timestamp'); return; }
-    if(!userId) { console.error('IChatMessage is missing userId'); return; }
+    if(!text) { console.error("IChatMessage is missing text"); return; }
+    if(!timestamp) { console.error("IChatMessage is missing timestamp"); return; }
+    if(!userId) { console.error("IChatMessage is missing userId"); return; }
 
     return {
         userId: newUserId(userId),
@@ -25,8 +25,8 @@ export function validateContentType(content: string): ContentType | undefined {
 }
 
 export function validateContent(content: IContent): Content | undefined {
-    if (!content.type) { console.error('IContent is missing type'); return; }
-    if (!content.contentLocation) { console.error('IContent is missing type'); return; }
+    if (!content.type) { console.error("IContent is missing type"); return; }
+    if (!content.contentLocation) { console.error("IContent is missing type"); return; }
 
     const type = validateContentType(content.type);
     if(!type) { console.error(`IContent has an invalid type '${content.type}'`); return; }
@@ -44,82 +44,82 @@ export function validateContent(content: IContent): Content | undefined {
  */
 export function validateState(classState: IClassState): ClassState | undefined {
 
-    const chatMessages: ChatMessageState[] = []
+    const chatMessages: ChatMessageState[] = [];
     if(classState.chatMessages) {
         classState.chatMessages.forEach((m) => {
             const validChatMessage = validateChatMessage(m);
-            if(!validChatMessage) { console.error(`IClassState has an invalid chatMessage`); return; }
-            chatMessages.push(validChatMessage)
-        })
+            if(!validChatMessage) { console.error("IClassState has an invalid chatMessage"); return; }
+            chatMessages.push(validChatMessage);
+        });
     } else {
-        console.error(`IClassState is missing chatMessages`);
+        console.error("IClassState is missing chatMessages");
     }
 
-    let content = { type: ContentType.Blank, contentLocation: "" }
+    let content = { type: ContentType.Blank, contentLocation: "" };
     if(classState.content) {
-        const validContent = validateContent(classState.content)
+        const validContent = validateContent(classState.content);
         if(validContent) {
-            content = validContent
+            content = validContent;
         } else {
-            console.error(`IClassState has an invalid content`);
+            console.error("IClassState has an invalid content");
         }
     } else {
-        console.error(`IClassState is missing content`);
+        console.error("IClassState is missing content");
     }
 
-    const devices: Record<DeviceID, DeviceState> = {}
+    const devices: Record<DeviceID, DeviceState> = {};
     if (classState.devices) {
         Object.values(classState.devices).forEach((device) => {
-            const validatedDevice = validateDevice(device)
-            if(!validatedDevice) { console.error(`IClassState has invalid device`); return; }
-            devices[validatedDevice.id] = validatedDevice
+            const validatedDevice = validateDevice(device);
+            if(!validatedDevice) { console.error("IClassState has invalid device"); return; }
+            devices[validatedDevice.id] = validatedDevice;
         });
     } else {
-        console.error('IClassState is missing devices');
+        console.error("IClassState is missing devices");
     }
 
 
-    const users: Record<UserID, UserState> = {}
+    const users: Record<UserID, UserState> = {};
     if (classState.users) {
         Object.values(classState.users).forEach((user) => {
-            const validUser = validateUser(user)
-            if(!validUser) { console.error(`IClassState has invalid user`); return; }
-            const priorDeviceCount = validUser.deviceIds.length
-            validUser.deviceIds = validUser.deviceIds.filter((deviceId) => (deviceId in devices))
+            const validUser = validateUser(user);
+            if(!validUser) { console.error("IClassState has invalid user"); return; }
+            const priorDeviceCount = validUser.deviceIds.length;
+            validUser.deviceIds = validUser.deviceIds.filter((deviceId) => (deviceId in devices));
             if(validUser.deviceIds.length !== priorDeviceCount) { console.error("Removed unknown DeviceID from IUser"); }
-            users[validUser.id] = validUser
+            users[validUser.id] = validUser;
         });
     } else {
-        console.error('IClassState is missing users');
+        console.error("IClassState is missing users");
     }
 
 
     for(const device of values(devices)) {
         if(!users.hasOwnProperty(device.userId)) {
-            console.error(`Device(${device.id}) references unknown User(${device.userId})`)
+            console.error(`Device(${device.id}) references unknown User(${device.userId})`);
         }
     }
 
     return {
-         chatMessages,
-         content,
-         devices,
-         users,
-         classEndTime: classState.classEndedTime ? newTimestamp(classState.classEndedTime) : undefined,
-         hostDeviceId: classState.hostDeviceId ? newDeviceId(classState.hostDeviceId) : undefined,
+        chatMessages,
+        content,
+        devices,
+        users,
+        classEndTime: classState.classEndedTime ? newTimestamp(classState.classEndedTime) : undefined,
+        hostDeviceId: classState.hostDeviceId ? newDeviceId(classState.hostDeviceId) : undefined,
     };
 }
 
 export function validateUser(user: IUser): UserState | undefined {
-    if(!user.id) { console.error('IUser is missing id'); return; }
-    if(!user.deviceIds) { console.error('IUser is missing deviceIds'); return; }
-    if(!user.name) { console.error('IUser is missing name'); return; }
-    if(!user.role) { console.error('IUser is missing role'); return; }
+    if(!user.id) { console.error("IUser is missing id"); return; }
+    if(!user.deviceIds) { console.error("IUser is missing deviceIds"); return; }
+    if(!user.name) { console.error("IUser is missing name"); return; }
+    if(!user.role) { console.error("IUser is missing role"); return; }
 
-    const trophies: Trophy[] = []
+    const trophies: Trophy[] = [];
     for(const trophy of trophies) {
-        const validTrophy = validateTrophy(trophy)
-        if(validTrophy) { trophies.push(validTrophy) }
+        const validTrophy = validateTrophy(trophy);
+        if(validTrophy) { trophies.push(validTrophy); }
     }
 
     return {
@@ -132,8 +132,8 @@ export function validateUser(user: IUser): UserState | undefined {
 }
 
 export function validateDevice({id, activityStreamId, userId, webRtcStreamIds}: IDevice): DeviceState | undefined {
-    if(!id) { console.error('IDevice is missing id'); return; }
-    if(!userId) { console.error('IDevice is missing userId'); return; }
+    if(!id) { console.error("IDevice is missing id"); return; }
+    if(!userId) { console.error("IDevice is missing userId"); return; }
     return {
         id: newDeviceId(id),
         userId: newUserId(userId),
@@ -143,9 +143,9 @@ export function validateDevice({id, activityStreamId, userId, webRtcStreamIds}: 
 }
 
 export function validateTrophy(trophy: ITrophy): Trophy | undefined {
-    if (!trophy.timestamp) { console.error('ITrophy is missing trophy.timestamp'); return; }
-    if (!trophy.type) { console.error('ITrophy is missing trophy.type'); return; }
-    if (!trophy.fromUserId) { console.error('ITrophy is missing trophy.fromUserId'); return; }
+    if (!trophy.timestamp) { console.error("ITrophy is missing trophy.timestamp"); return; }
+    if (!trophy.type) { console.error("ITrophy is missing trophy.type"); return; }
+    if (!trophy.fromUserId) { console.error("ITrophy is missing trophy.fromUserId"); return; }
     //TODO: Handle uint64
     const timestamp = trophy.timestamp;
     const type = newTrophyType(trophy.type);
