@@ -18,7 +18,7 @@ export function WebRtcProvider<ApplicationState = unknown>({
     const store = useStore<ApplicationState, Action>();
     const value = useMemo(() => new WebRtcManager(store, selector, getSfuUrl), []);
     return (
-        <WebRtcContext.Provider value={value as WebRtcManager<unknown>}>
+        <WebRtcContext.Provider value={value as WebRtcManager}>
             {children}
         </WebRtcContext.Provider>
     );

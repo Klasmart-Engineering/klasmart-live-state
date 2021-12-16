@@ -95,6 +95,7 @@ export function validateState(classState: IClassState): ClassState | undefined {
 
 
     for(const device of values(devices)) {
+        // eslint-disable-next-line no-prototype-builtins
         if(!users.hasOwnProperty(device.userId)) {
             console.error(`Device(${device.id}) references unknown User(${device.userId})`);
         }

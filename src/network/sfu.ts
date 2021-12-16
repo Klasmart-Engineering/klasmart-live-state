@@ -184,13 +184,13 @@ export class SFU<ApplicationState = unknown> {
         transport.on("connect", (producerTransportConnect, callback, error) => this.request({ producerTransportConnect }).then(callback, error));
         transport.on("produce", async (createTrack, callback, error) => {
             try {
-                const response = await this.request({ createTrack })
-                if(!response) { return error('Empty response from SFU'); }
-                const id = response.createTrack
-                if(!response.createTrack) { return error('Empty response from SFU'); }
-                callback({id})
+                const response = await this.request({ createTrack });
+                if(!response) { return error("Empty response from SFU"); }
+                const id = response.createTrack;
+                if(!response.createTrack) { return error("Empty response from SFU"); }
+                callback({id});
             } catch(e) {
-                error(e)
+                error(e);
             }
         });
         transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
@@ -304,18 +304,18 @@ function ExecuteOnce() {
         if (typeof childFunction !== "function") {
             throw new TypeError(`Only methods can be decorated with @ExecuteOnce.  Property ${String(propertyKey)} is not a method.`);
         }
-        let shouldReturnCache = false
+        let shouldReturnCache = false;
         let cache: unknown;
         descriptor.value = function (...args: any[]) {
-            if(shouldReturnCache) { return cache }
+            if(shouldReturnCache) { return cache; }
             try {
                 const result = cache = childFunction.apply(this, args);
-                shouldReturnCache = true
-                if(result instanceof Promise) { result.catch(() => shouldReturnCache = false) }
-                return result
+                shouldReturnCache = true;
+                if(result instanceof Promise) { result.catch(() => shouldReturnCache = false); }
+                return result;
             } catch (e) {
-                shouldReturnCache = false
-                throw e
+                shouldReturnCache = false;
+                throw e;
             }
 
         };

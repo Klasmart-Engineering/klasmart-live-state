@@ -82,7 +82,7 @@ const deviceDisconnect: Reducer<{ deviceId: DeviceID }> = (state, action) => {
     if (state.hostDeviceId === device.id) {
         state.hostDeviceId = undefined;
         const userIds = Object.keys(state.users) as UserID[];
-        // userIds.sort(); sort may be unecessary
+        // userIds.sort(); sort may be unnecessary
         // It ensures deterministic evaluation on all clients, regardless of the keys array ordering
         // Which could be affected by serialization and deserialization during network messages
         userIds.sort();
