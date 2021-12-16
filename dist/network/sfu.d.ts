@@ -33,16 +33,19 @@ export declare class SFU<ApplicationState = unknown> {
     private readonly tracks;
     private readonly promiseCompleter;
     private readonly ws;
+    private _ready;
     constructor(id: SfuID, store: Store<ApplicationState, Action>, selector: (s: ApplicationState) => State, url: string);
     getTrack(id: ProducerID): Promise<MediaStreamTrack>;
     produceTrack(track: MediaStreamTrack): Promise<MediaSoup.Producer>;
+    private ready;
+    private setReady;
     private consumeTrack;
     private consumerTransport;
     private producerTransport;
     private sendRtpCapabilities;
     private loadDevice;
     private request;
-    private _requestId;
+    private requestId;
     private generateRequestId;
     private onTransportStateChange;
     private onTransportMessage;
@@ -52,5 +55,13 @@ export declare class SFU<ApplicationState = unknown> {
     private closeTrack;
     private setTrack;
     private handlePauseMessage;
+    /** Decorator that waits for the SFU to be ready before executing the decorated function.  Converts any function to an `async`
+     *  function, so be sure to `await` for the result. */
+    private static WaitReady;
 }
+/**
+ *  Decorator that ensures the decorated function body is executed only once, unless the function throws an error.
+ *  All subsequent calls return the same value as the first call
+ **/
+export declare function ExecuteOnce(): (_target: object, propertyKey: string | symbol, descriptor: PropertyDescriptor) => PropertyDescriptor;
 //# sourceMappingURL=sfu.d.ts.map

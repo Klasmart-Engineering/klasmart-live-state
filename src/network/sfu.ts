@@ -1,7 +1,7 @@
 import { types as MediaSoup, Device } from "mediasoup-client";
 import { NewType } from "../types";
-import { TransportState, WSTransport } from "../network/websocketTransport";
-import { PromiseCompleter } from "../network/promiseCompleter";
+import { TransportState, WSTransport } from "./websocketTransport";
+import { PromiseCompleter } from "./promiseCompleter";
 import { Store } from "@reduxjs/toolkit";
 import { Action, State } from "../redux/reducer";
 import { webrtcSlice } from "../redux/sfu";
@@ -90,6 +90,7 @@ export class SFU<ApplicationState = unknown> {
 
     private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestID>();
     private readonly ws: WSTransport;
+    private _ready = this.promiseCompleter.createPromise("ready" as RequestID);
 
     public constructor(
         private readonly id: SfuID,
@@ -109,7 +110,6 @@ export class SFU<ApplicationState = unknown> {
         this.ws.connect().catch(e => console.error(e));
     }
 
-
     public async getTrack(id: ProducerID) {
         const track = this.tracks.get(id);
         const mediaTrack = track?.producer?.track || track?.consumer?.track;
@@ -121,7 +121,7 @@ export class SFU<ApplicationState = unknown> {
     public async produceTrack(track: MediaStreamTrack) {
         const producerTransport = await this.producerTransport();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
-        if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
+        if (!canProduce) { console.warn(`It seems like the remote router is not ready or cannot receive '${track.kind}' tracks`); }
         const producer = await producerTransport.produce({
             track,
             zeroRtpOnPause: true,
@@ -137,6 +137,18 @@ export class SFU<ApplicationState = unknown> {
             globalPause: false
         });
         return producer;
+    }
+
+    @ExecuteOnce()
+    private async ready() {
+        console.log("Awaiting on ready");
+        await this._ready;
+        console.log("Ready");
+    }
+
+    @ExecuteOnce()
+    private setReady() {
+        this.promiseCompleter.resolve("ready" as RequestID);
     }
 
     private async consumeTrack(producerId: ProducerID) {
@@ -216,6 +228,7 @@ export class SFU<ApplicationState = unknown> {
         await this.device.load({ routerRtpCapabilities });
     }
 
+    @SFU.WaitReady()
     private async request(request: Request) {
         const id = this.generateRequestId();
         const message: RequestMessage = { id, request };
@@ -223,8 +236,8 @@ export class SFU<ApplicationState = unknown> {
         return this.promiseCompleter.createPromise(id);
     }
 
-    private _requestId = 0;
-    private generateRequestId() { return `${this._requestId++}` as RequestID; }
+    private requestId = 0;
+    private generateRequestId() { return `${this.requestId++}` as RequestID; }
 
     private onTransportStateChange(state: TransportState) {
         console.log(`Transport state changed to ${state}`);
@@ -233,6 +246,7 @@ export class SFU<ApplicationState = unknown> {
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
         const message = SFU.parse(data);
         if (!message) { this.ws.disconnect(4400); return; }
+        this.setReady();
         this.handleMessage(message).catch(e => console.error(e));
     }
 
@@ -292,13 +306,29 @@ export class SFU<ApplicationState = unknown> {
         const action = webrtcSlice.actions.setTrack({ id: this.id, producerId, status: { localPause, globalPause } });
         this.store.dispatch(action);
     }
+
+    /** Decorator that waits for the SFU to be ready before executing the decorated function.  Converts any function to an `async`
+     *  function, so be sure to `await` for the result. */
+    private static WaitReady() {
+        return (_target: object, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            if (typeof childFunction !== "function") {
+                throw new TypeError(`Only methods can be decorated with @WaitReady.  Property ${String(propertyKey)} is not a method.`);
+            }
+            descriptor.value = async function (this: SFU, ...args: unknown[]) {
+                await this.ready();
+                return childFunction.apply(this, args);
+            };
+            return descriptor;
+        };
+    }
 }
 
 /**
  *  Decorator that ensures the decorated function body is executed only once, unless the function throws an error.
  *  All subsequent calls return the same value as the first call
  **/
-function ExecuteOnce() {
+export function ExecuteOnce() {
     return (_target: object, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
         const childFunction = descriptor.value;
         if (typeof childFunction !== "function") {
@@ -306,7 +336,7 @@ function ExecuteOnce() {
         }
         let shouldReturnCache = false;
         let cache: unknown;
-        descriptor.value = function (...args: any[]) {
+        descriptor.value = function (...args: unknown[]) {
             if(shouldReturnCache) { return cache; }
             try {
                 const result = cache = childFunction.apply(this, args);
@@ -317,7 +347,6 @@ function ExecuteOnce() {
                 shouldReturnCache = false;
                 throw e;
             }
-
         };
         return descriptor;
     };
