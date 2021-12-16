@@ -13,7 +13,10 @@ export class WebRtcManager<ApplicationState = unknown> {
     ) { }
 
     public async globalPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error("Not implemented"); }
-    public async localPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error("Not implemented"); }
+    public async localPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) {
+        const sfu = this.sfu(sfuId);
+        return sfu.locallyPauseTrack(producerId, paused);
+    }
 
     public getTracks(id: SfuID, ids: ProducerID[]) {
         const sfu = this.sfu(id);

@@ -139,6 +139,19 @@ export class SFU<ApplicationState = unknown> {
         return producer;
     }
 
+    public async locallyPauseTrack(producerId: ProducerID, paused: boolean) {
+        const track = this.tracks.get(producerId);
+        if (!track) { return; }
+
+        const response = await this.request({
+            locallyPause: {
+                id: producerId,
+                paused
+            }
+        });
+        console.log(JSON.stringify(response));
+    }
+
     @ExecuteOnce()
     private async ready() {
         console.log("Awaiting on ready");

@@ -20,7 +20,7 @@ export class WSTransport {
     private readonly protocols: string[] | undefined = undefined,
     private autoconnect = true,
     private receiveMessageTimeoutTime: number|null = 5000,
-    private sendKeepAliveMessageInterval:number|null = 1000 /* eslint-enable no-unused-vars */
+    private sendKeepAliveMessageInterval: number|null = 1000 /* eslint-enable no-unused-vars */
     ) {}
 
     public async connect() {
