@@ -104,11 +104,9 @@ export class SFU<ApplicationState = unknown> {
             ["live-sfu"],
             true,
             null,
-            null,
         );
         this.ws.connect().catch(e => console.error(e));
     }
-
 
     public async getTrack(id: ProducerID) {
         const track = this.tracks.get(id);
@@ -131,11 +129,13 @@ export class SFU<ApplicationState = unknown> {
         producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport(${producerTransport.id}) closed`));
         producer.on("trackended", () => console.log(`Producer(${producer.id}) ended`));
 
-        this.setTrack(producer.id as ProducerID, {
+        const id = producer.id as ProducerID;
+        this.setTrack(id, {
             producer,
             localPause: producer.paused,
             globalPause: false
         });
+        this.request({locallyPause: {id, paused: false}});
         return producer;
     }
 
@@ -150,16 +150,26 @@ export class SFU<ApplicationState = unknown> {
         consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s Transport(${consumerTransport.id}) closed`));
         consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
 
-        this.setTrack(consumer.id as ProducerID, {
+        this.setTrack(producerId as ProducerID, {
             consumer,
             localPause: consumer.paused,
             globalPause: false
         });
+        this.request({locallyPause: {id: producerId, paused: false}});
         return consumer;
     }
 
+    public async globalPause(id: ProducerID, paused: boolean) {
+        return this.request({globallyPause: {id, paused}});
+    }
+    public async localPause(id: ProducerID, paused: boolean) {
+        return this.request({locallyPause: {id, paused}});
+    }
+
+
     @ExecuteOnce()
     private async consumerTransport() {
+        await this.loadDevice();
         const response = await this.request({ consumerTransport: {} });
         if (!response) { throw new Error("Empty response from SFU"); }
         const { consumerTransport } = response;
@@ -184,13 +194,13 @@ export class SFU<ApplicationState = unknown> {
         transport.on("connect", (producerTransportConnect, callback, error) => this.request({ producerTransportConnect }).then(callback, error));
         transport.on("produce", async (createTrack, callback, error) => {
             try {
-                const response = await this.request({ createTrack })
-                if(!response) { return error('Empty response from SFU'); }
-                const id = response.createTrack
-                if(!response.createTrack) { return error('Empty response from SFU'); }
-                callback({id})
+                const response = await this.request({ createTrack });
+                if(!response) { return error("Empty response from SFU"); }
+                const id = response.createTrack;
+                if(!response.createTrack) { return error("Empty response from SFU"); }
+                callback({id});
             } catch(e) {
-                error(e)
+                error(e);
             }
         });
         transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
@@ -232,12 +242,13 @@ export class SFU<ApplicationState = unknown> {
 
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
         const message = SFU.parse(data);
-        if (!message) { this.ws.disconnect(4400); return; }
+        if (!message) {  return this.ws.disconnect(4400); }
         this.handleMessage(message).catch(e => console.error(e));
     }
 
     private static parse(data: string | ArrayBuffer | Blob): ResponseMessage | undefined {
         if (typeof data !== "string") { return; }
+        if(data.length === 0) { return {}; }
         const response = JSON.parse(data.toString()) as ResponseMessage;
         if (typeof response !== "object" || !response) { return; }
         return response;
@@ -284,6 +295,7 @@ export class SFU<ApplicationState = unknown> {
 
     private handlePauseMessage({ id: producerId, localPause, globalPause }: PauseMessage) {
         const track = this.tracks.get(producerId);
+        console.log("pause", track, localPause, globalPause);
         if (!track) { return console.error(`Could not find Track(${producerId}) to pause/resume producer`); }
 
         track.localPause = localPause;
@@ -304,18 +316,18 @@ function ExecuteOnce() {
         if (typeof childFunction !== "function") {
             throw new TypeError(`Only methods can be decorated with @ExecuteOnce.  Property ${String(propertyKey)} is not a method.`);
         }
-        let shouldReturnCache = false
+        let shouldReturnCache = false;
         let cache: unknown;
         descriptor.value = function (...args: any[]) {
-            if(shouldReturnCache) { return cache }
+            if(shouldReturnCache) { return cache; }
             try {
                 const result = cache = childFunction.apply(this, args);
-                shouldReturnCache = true
-                if(result instanceof Promise) { result.catch(() => shouldReturnCache = false) }
-                return result
+                shouldReturnCache = true;
+                if(result instanceof Promise) { result.catch(() => shouldReturnCache = false); }
+                return result;
             } catch (e) {
-                shouldReturnCache = false
-                throw e
+                shouldReturnCache = false;
+                throw e;
             }
 
         };

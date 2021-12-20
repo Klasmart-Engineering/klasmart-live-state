@@ -10,7 +10,8 @@ export declare class WebRtcManager<ApplicationState = unknown> {
     constructor(store: Store<ApplicationState, Action>, selector: (s: ApplicationState) => State, getUrl: (id: SfuID) => URL);
     globalPause(sfuId: SfuID, producerId: ProducerID, paused: boolean): Promise<void>;
     localPause(sfuId: SfuID, producerId: ProducerID, paused: boolean): Promise<void>;
-    getTracks(id: SfuID, ids: ProducerID[]): Promise<MediaStreamTrack>[];
+    getTrack(sfuId: SfuID, producerId: ProducerID): Promise<MediaStreamTrack>;
+    sendTrack(id: SfuID, track: MediaStreamTrack): Promise<import("mediasoup-client/lib/Producer").Producer>;
     sendTracks(id: SfuID, tracks: MediaStreamTrack[]): Promise<import("mediasoup-client/lib/Producer").Producer>[];
     private sfu;
 }

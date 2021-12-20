@@ -12,12 +12,27 @@ export class WebRtcManager<ApplicationState = unknown> {
         public readonly getUrl: (id: SfuID) => URL,
     ) { }
 
-    public async globalPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error("Not implemented"); }
-    public async localPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) { throw new Error("Not implemented"); }
+    public async globalPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) {
+        const sfu = this.sfus.get(sfuId);
+        if(!sfu) {throw new Error(`Not connected to SFU(${sfuId})`); }
+        await sfu.globalPause(producerId, paused);
+    }
 
-    public getTracks(id: SfuID, ids: ProducerID[]) {
+    public async localPause(sfuId: SfuID, producerId: ProducerID, paused: boolean) {
+        const sfu = this.sfus.get(sfuId);
+        console.log("localPause",sfu, this.sfus);
+        if(!sfu) {throw new Error(`Not connected to SFU(${sfuId})`); }
+        await sfu.localPause(producerId, paused);
+    }
+
+    public getTrack(sfuId: SfuID, producerId: ProducerID) {
+        const sfu = this.sfu(sfuId);
+        return sfu.getTrack(producerId);
+    }
+
+    public sendTrack(id: SfuID, track: MediaStreamTrack) {
         const sfu = this.sfu(id);
-        return ids.map(id => sfu.getTrack(id));
+        return sfu.produceTrack(track);
     }
 
     public sendTracks(id: SfuID, tracks: MediaStreamTrack[]) {

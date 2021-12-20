@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo } from "react";
+import { useContext } from "react";
 import { useAsyncCallback } from "react-async-hook";
 import { useSelector } from "react-redux";
 import { SfuID, ProducerID } from "../../network/sfu";
@@ -28,25 +28,6 @@ export function useWebRtcState<T = unknown>(
     );
 }
 
-export function useMediaStream(sfuId: SfuID, ids: ProducerID[]) {
-    //This will trigger rerenders
-    useWebRtcState(s => ids.map(id => s.webrtc.sfus[sfuId]?.tracks[id]));
-
-    const webrtc = useContext(WebRtcContext);
-    const mediaStream = useMemo(() => new MediaStream(), []);
-
-    useEffect(() => {
-        const tracks = webrtc.getTracks(sfuId, ids);
-        tracks.forEach(t => t.then(track => {
-            if(mediaStream.getTrackById(track.id)) { return; }
-            mediaStream.addTrack(track);
-        },
-        ));
-        //TODO: Check whether we need to remove old tracks
-    }, [ids, sfuId, mediaStream]);
-
-    return mediaStream;
-}
 
 export function useSendMediaStream() {
     const webrtc = useContext(WebRtcContext);
@@ -63,22 +44,22 @@ export function useSendMediaStream() {
     });
 }
 
-export function useLocallyPauseMediaStream() {
-    const webrtc = useContext(WebRtcContext);
-    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID) => webrtc.localPause(sfuId, producerId, false));
+export function useMediaTrackIsPaused(sfuId: SfuID, producerId: ProducerID) {
+    return useWebRtcState(s => {
+        const sfu = s.webrtc.sfus[sfuId];
+        if(!sfu) {return;} 
+        const track = sfu.tracks[producerId];
+        if(!track) {return;}
+        return track.globalPause || track.localPause;
+    });
 }
 
-export function useLocallyResumeMediaStream() {
+export function useLocallyPauseMediaTrack() {
     const webrtc = useContext(WebRtcContext);
-    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID) => webrtc.localPause(sfuId, producerId, true));
+    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID, pause: boolean) => webrtc.localPause(sfuId, producerId, pause));
 }
 
 export function useGloballyPauseMediaStream() {
     const webrtc = useContext(WebRtcContext);
-    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID) => webrtc.globalPause(sfuId, producerId, true));
-}
-
-export function useGloballyResumeMediaStream() {
-    const webrtc = useContext(WebRtcContext);
-    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID) => webrtc.globalPause(sfuId, producerId, false));
+    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID, pause: boolean) => webrtc.globalPause(sfuId, producerId, pause));
 }

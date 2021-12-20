@@ -18,6 +18,19 @@ export declare type WebRtcTransportResult = {
     dtlsParameters: MediaSoup.DtlsParameters;
     sctpParameters?: MediaSoup.SctpParameters;
 };
+declare type Result = {
+    routerRtpCapabilities?: MediaSoup.RtpCapabilities;
+    producerTransport?: WebRtcTransportResult;
+    createTrack?: ProducerID;
+    consumerTransport?: WebRtcTransportResult;
+    consumerCreated?: {
+        id: ConsumerID;
+        producerId: ProducerID;
+        kind: MediaSoup.MediaKind;
+        rtpParameters: MediaSoup.RtpParameters;
+        paused: boolean;
+    };
+};
 export declare type Track = {
     producer?: MediaSoup.Producer;
     consumer?: MediaSoup.Consumer;
@@ -37,6 +50,8 @@ export declare class SFU<ApplicationState = unknown> {
     getTrack(id: ProducerID): Promise<MediaStreamTrack>;
     produceTrack(track: MediaStreamTrack): Promise<MediaSoup.Producer>;
     private consumeTrack;
+    globalPause(id: ProducerID, paused: boolean): Promise<void | Result>;
+    localPause(id: ProducerID, paused: boolean): Promise<void | Result>;
     private consumerTransport;
     private producerTransport;
     private sendRtpCapabilities;
@@ -53,4 +68,5 @@ export declare class SFU<ApplicationState = unknown> {
     private setTrack;
     private handlePauseMessage;
 }
+export {};
 //# sourceMappingURL=sfu.d.ts.map
