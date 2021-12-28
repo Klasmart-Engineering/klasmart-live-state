@@ -4,12 +4,20 @@ import { TransportState, WSTransport } from "../network/websocketTransport";
 import { PromiseCompleter } from "../network/promiseCompleter";
 import { Store } from "@reduxjs/toolkit";
 import { Action, State } from "../redux/reducer";
-import { webrtcSlice } from "../redux/sfu";
+import { webrtcActions } from "../redux/webrtc";
+import produce from "immer";
 
 export type SfuID = NewType<string, "sfuId">
+export const newSfuID = (id: string) => id as SfuID;
+
 export type ProducerID = NewType<string, "producerId">
+export const newProducerID = (id: string) => id as ProducerID;
+
 export type ConsumerID = NewType<string, "consumerId">
+export const newConsumerID = (id: string) => id as ConsumerID;
+
 export type RequestID = NewType<string, "requestId">
+export const newRequestID = (id: string) => id as RequestID;
 
 type RequestMessage = {
     id: RequestID,
@@ -84,7 +92,7 @@ export type Track = {
     globalPause: boolean
 }
 
-export class SFU<ApplicationState = unknown> {
+export class SFU {
     private readonly device = new Device();
     private readonly tracks = new Map<ProducerID, Track>();
 
@@ -92,10 +100,9 @@ export class SFU<ApplicationState = unknown> {
     private readonly ws: WSTransport;
 
     public constructor(
-        private readonly id: SfuID,
-        private readonly store: Store<ApplicationState, Action>,
-        private readonly selector: (s: ApplicationState) => State,
-        readonly url: string,
+        public readonly id: SfuID,
+        private readonly store: Store<unknown, Action>,
+        public readonly url: string,
     ) {
         this.ws = new WSTransport(
             url,
@@ -115,8 +122,8 @@ export class SFU<ApplicationState = unknown> {
         const consumer = await this.consumeTrack(id);
         return consumer.track;
     }
-
-    public async produceTrack(track: MediaStreamTrack) {
+    
+    public async createProducer(track: MediaStreamTrack) {
         const producerTransport = await this.producerTransport();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
@@ -135,7 +142,7 @@ export class SFU<ApplicationState = unknown> {
             localPause: producer.paused,
             globalPause: false
         });
-        this.request({locallyPause: {id, paused: false}});
+        if(producer.paused) { await this.localPause(id, false); }
         return producer;
     }
 
@@ -177,7 +184,7 @@ export class SFU<ApplicationState = unknown> {
         const transport = this.device.createRecvTransport(consumerTransport);
         transport.on("connect", ({ dtlsParameters }, success, error) => this.request({ consumerTransportConnect: { dtlsParameters } }).then(success, error));
         transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
-            const action = webrtcSlice.actions.setConsumerConnectionStatus({ id: this.id, connectionState });
+            const action = webrtcActions.setConsumerConnectionStatus({ id: this.id, connectionState });
             this.store.dispatch(action);
         });
         return transport;
@@ -204,7 +211,7 @@ export class SFU<ApplicationState = unknown> {
             }
         });
         transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
-            const action = webrtcSlice.actions.setProducerConnectionStatus({ id: this.id, connectionState });
+            const action = webrtcActions.setProducerConnectionStatus({ id: this.id, connectionState });
             this.store.dispatch(action);
         });
         return transport;
@@ -276,13 +283,13 @@ export class SFU<ApplicationState = unknown> {
     private closeTrack(producerId: ProducerID) {
         this.tracks.delete(producerId);
 
-        const action = webrtcSlice.actions.closeTrack({ id: this.id, producerId });
+        const action = webrtcActions.closeTrack({ id: this.id, producerId });
         this.store.dispatch(action);
     }
 
     private setTrack(producerId: ProducerID, track: Track) {
         this.tracks.set(producerId, track);
-        const action = webrtcSlice.actions.setTrack({
+        const action = webrtcActions.setTrack({
             id: this.id,
             producerId,
             status: {
@@ -301,7 +308,7 @@ export class SFU<ApplicationState = unknown> {
         track.localPause = localPause;
         track.globalPause = globalPause;
 
-        const action = webrtcSlice.actions.setTrack({ id: this.id, producerId, status: { localPause, globalPause } });
+        const action = webrtcActions.setTrack({ id: this.id, producerId, status: { localPause, globalPause } });
         this.store.dispatch(action);
     }
 }

@@ -15,7 +15,7 @@ export * from "./react/rtcProvider";
 export * from "./redux/class";
 export * from "./redux/network";
 export * from "./redux/reducer";
-export * from "./redux/sfu";
+export * from "./redux/webrtc";
 
 export * from "./roles";
 

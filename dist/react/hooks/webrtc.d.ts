@@ -1,9 +1,26 @@
-import { SfuID, ProducerID } from "../../network/sfu";
-import { State } from "../../redux/reducer";
-export declare function useCamera(): import("react-async-hook").UseAsyncReturn<MediaStream, any[]>;
-export declare function useWebRtcState<T = unknown>(selector: (state: State) => T, equalityCheck?: (left: T, right: T) => boolean): T;
-export declare function useSendMediaStream(): import("react-async-hook").UseAsyncReturn<ProducerID[], [sfuId: SfuID, mediaStream: MediaStream]>;
-export declare function useMediaTrackIsPaused(sfuId: SfuID, producerId: ProducerID): boolean | undefined;
-export declare function useLocallyPauseMediaTrack(): import("react-async-hook").UseAsyncReturn<void, [sfuId: SfuID, producerId: ProducerID, pause: boolean]>;
-export declare function useGloballyPauseMediaStream(): import("react-async-hook").UseAsyncReturn<void, [sfuId: SfuID, producerId: ProducerID, pause: boolean]>;
+import { ProducerID } from "../../network/sfu";
+import { TrackLocation } from "../rtcContext";
+export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) => {
+    start: import("react-async-hook").UseAsyncReturn<void, []>;
+    stop: import("react-async-hook").UseAsyncReturn<void, []>;
+    paused: import("../../ui").TrackStatus | undefined;
+};
+export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager) => {
+    start: import("react-async-hook").UseAsyncReturn<void, []>;
+    stop: import("react-async-hook").UseAsyncReturn<void, []>;
+    paused: import("../../ui").TrackStatus | undefined;
+};
+export declare const useScreenshare: (ctx?: import("../rtcContext").WebRtcManager) => {
+    start: import("react-async-hook").UseAsyncReturn<void, []>;
+    stop: import("react-async-hook").UseAsyncReturn<void, []>;
+    videoPaused: import("../../ui").TrackStatus | undefined;
+    audioPaused: import("../../ui").TrackStatus | undefined;
+};
+export declare const useStream: (ids: ProducerID[], ctx?: import("../rtcContext").WebRtcManager) => MediaStream;
+export declare const useTrack: (location: TrackLocation, ctx?: import("../rtcContext").WebRtcManager) => {
+    track: import("react-async-hook").UseAsyncReturn<MediaStreamTrack, [l: TrackLocation]>;
+    paused: import("../../ui").TrackStatus | undefined;
+    localPause: import("react-async-hook").UseAsyncReturn<void, [paused: boolean]>;
+    globalPause: import("react-async-hook").UseAsyncReturn<void, [paused: boolean]>;
+};
 //# sourceMappingURL=webrtc.d.ts.map

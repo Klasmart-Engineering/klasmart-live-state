@@ -1,65 +1,78 @@
-import { useContext } from "react";
-import { useAsyncCallback } from "react-async-hook";
+import { useContext, useMemo } from "react";
+import { useAsync, useAsyncCallback } from "react-async-hook";
 import { useSelector } from "react-redux";
-import { SfuID, ProducerID } from "../../network/sfu";
+import { newSfuID, ProducerID } from "../../network/sfu";
 import { State } from "../../redux/reducer";
-import { WebRtcContext } from "../rtcContext";
+import { StreamSender, TrackLocation, TrackSender, WebRtcContext } from "../rtcContext";
 
-export function useCamera() {
-    return useAsyncCallback<MediaStream>(async (
-        constraints: MediaStreamConstraints = {
-            video: true,
-            audio: true,
-        },
-    ) => {
-        if(!navigator?.mediaDevices?.getUserMedia) { throw new Error("Could not get user media"); }
-        return await navigator.mediaDevices.getUserMedia(constraints);
-    });
-}
+export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.camera, ctx);
+export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone, ctx);
+export const useScreenshare = (ctx = useContext(WebRtcContext)) => useStreamSender(ctx.screenshare, ctx);
 
-export function useWebRtcState<T = unknown>(
+export const useStream = (
+    ids: ProducerID[],
+    ctx = useContext(WebRtcContext),
+) => {
+    const stream = useMemo(() => {
+        const stream = new MediaStream();
+        ids.map(producer => ctx
+            .getTrack({producerId: producer,sfuId: newSfuID("test-sfu")})
+            .then(t => stream.addTrack(t)),
+        );
+        return stream;
+    }, ids);
+    return stream;
+};
+
+export const useTrack = (
+    location: TrackLocation,
+    ctx = useContext(WebRtcContext),
+) => ({
+    track: useAsync((l: TrackLocation) => ctx.getTrack(l), [location]),
+    paused: useTrackPauseState(location, ctx),
+    localPause: useAsyncCallback((paused: boolean) => ctx.localPause(location, paused)),
+    globalPause: useAsyncCallback((paused: boolean) => ctx.globalPause(location, paused)),
+});
+
+const useStreamSender = (
+    streamSender: StreamSender,
+    ctx = useContext(WebRtcContext),
+) => ({
+    start: useAsyncCallback(() => streamSender.start()),
+    stop: useAsyncCallback(() => streamSender.stop()),
+    videoPaused: useTrackPauseState(streamSender.videoSender.location, ctx),
+    audioPaused: useTrackPauseState(streamSender.audioSender.location, ctx),
+});
+
+const useTrackSender = (
+    trackSender: TrackSender,
+    ctx = useContext(WebRtcContext),
+) => ({
+    start: useAsyncCallback(() => trackSender.start()),
+    stop: useAsyncCallback(() => trackSender.stop()),
+    paused: useTrackPauseState(trackSender.location, ctx),
+});
+
+const useTrackPauseState = (
+    location?: TrackLocation,
+    ctx = useContext(WebRtcContext),
+) => useWebRtcState(
+    s => {
+        if(!location) {return;}
+        const { sfuId: sfu, producerId: producer } = location;
+        return s.webrtc.sfus[sfu]?.tracks[producer];
+    },
+    undefined,
+    ctx,
+);
+
+function useWebRtcState<T = unknown>(
     selector: (state: State) => T,
-    equalityCheck?: (left: T, right: T) => boolean
+    equalityCheck?: (left: T, right: T) => boolean,
+    webrtc = useContext(WebRtcContext),
 ) {
-    const webrtc = useContext(WebRtcContext);
     return useSelector(
         (state) => selector(webrtc.selector(state)),
-        equalityCheck
+        equalityCheck,
     );
-}
-
-
-export function useSendMediaStream() {
-    const webrtc = useContext(WebRtcContext);
-    return useAsyncCallback(async (sfuId: SfuID, mediaStream: MediaStream) => {
-        const tracks = mediaStream.getTracks();
-        const promises = webrtc.sendTracks(sfuId, tracks);
-        if(!promises) { return [];}
-        const producers = await Promise.allSettled(promises);
-        return producers.reduce((ids: ProducerID[],result) => {
-            if(result.status !== "fulfilled") { return ids; }
-            return [...ids, result.value.id as ProducerID];
-        },
-        []);
-    });
-}
-
-export function useMediaTrackIsPaused(sfuId: SfuID, producerId: ProducerID) {
-    return useWebRtcState(s => {
-        const sfu = s.webrtc.sfus[sfuId];
-        if(!sfu) {return;} 
-        const track = sfu.tracks[producerId];
-        if(!track) {return;}
-        return track.globalPause || track.localPause;
-    });
-}
-
-export function useLocallyPauseMediaTrack() {
-    const webrtc = useContext(WebRtcContext);
-    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID, pause: boolean) => webrtc.localPause(sfuId, producerId, pause));
-}
-
-export function useGloballyPauseMediaStream() {
-    const webrtc = useContext(WebRtcContext);
-    return useAsyncCallback((sfuId: SfuID, producerId: ProducerID, pause: boolean) => webrtc.globalPause(sfuId, producerId, pause));
 }

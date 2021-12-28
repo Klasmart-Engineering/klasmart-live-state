@@ -1,9 +1,14 @@
 import { createSlice, CaseReducer, PayloadAction } from "@reduxjs/toolkit";
 import { ProducerID, SfuID } from "../network/sfu";
 import { types as MediaSoup } from "mediasoup-client";
+import { ValueOf } from "../types";
 
 export type WebRtcState = {
     sfus: Record<SfuID, SfuState>
+
+    videoInputs: MediaDeviceInfo[]
+    audioInputs: MediaDeviceInfo[]
+    audioOutputs: MediaDeviceInfo[]
 }
 
 export type SfuState = {
@@ -18,7 +23,34 @@ export type TrackStatus = {
 }
 
 export const initialState: WebRtcState = {
-    sfus: {}
+    sfus: {},
+    videoInputs: [],
+    audioInputs: [],
+    audioOutputs: [],
+};
+
+const setDevices: Reducer<MediaDeviceInfo[]> = (state, { payload: devices }) => {
+    const videoInputs: MediaDeviceInfo[] = [];
+    const audioInputs: MediaDeviceInfo[] = [];
+    const audioOutputs: MediaDeviceInfo[] = [];
+
+    devices.forEach(d => {
+        switch(d.kind) {
+        case "videoinput":
+            videoInputs.push(d);
+            break;
+        case "audioinput":
+            audioInputs.push(d);
+            break;
+        case "audiooutput":
+            audioOutputs.push(d);
+            break;
+        }
+    });
+
+    state.videoInputs = videoInputs;
+    state.audioInputs = audioInputs;
+    state.audioOutputs = audioOutputs;    
 };
 
 type Reducer<P = void, T extends string = string> = CaseReducer<WebRtcState, PayloadAction<P, T>>;
@@ -42,7 +74,6 @@ const setTrack: Reducer<{ id: SfuID, producerId: ProducerID, status: TrackStatus
         };
     }
 };
-
 
 const setConsumerConnectionStatus: Reducer<{ id: SfuID, connectionState: MediaSoup.ConnectionState }> = (state, { payload: { id, connectionState } }) => {
     const sfu = state.sfus[id];
@@ -70,7 +101,7 @@ const setProducerConnectionStatus: Reducer<{ id: SfuID, connectionState: MediaSo
 
 
 export const webRtcSliceActionPrefix = "webrtc";
-export const webrtcSlice = createSlice({
+const webrtcSlice = createSlice({
     name: webRtcSliceActionPrefix,
     initialState,
     reducers: {
@@ -78,5 +109,10 @@ export const webrtcSlice = createSlice({
         setTrack,
         setConsumerConnectionStatus,
         setProducerConnectionStatus,
+        setDevices,
     },
 });
+
+export const webrtcActions = webrtcSlice.actions;
+export const webrtcReducer = webrtcSlice.reducer;
+export type WebRtcAction = ReturnType<ValueOf<typeof webrtcSlice.actions>>;
