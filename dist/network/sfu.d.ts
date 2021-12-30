@@ -52,7 +52,7 @@ export declare class SFU {
     constructor(id: SfuID, store: Store<unknown, Action>, url: string);
     getTrack(id: ProducerID): Promise<MediaStreamTrack>;
     createProducer(track: MediaStreamTrack): Promise<MediaSoup.Producer>;
-    private consumeTrack;
+    private createConsumer;
     globalPause(id: ProducerID, paused: boolean): Promise<void | Result>;
     localPause(id: ProducerID, paused: boolean): Promise<void | Result>;
     private consumerTransport;

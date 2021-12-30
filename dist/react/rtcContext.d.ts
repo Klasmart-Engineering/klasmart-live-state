@@ -31,14 +31,18 @@ export declare class StreamSender {
 export declare class TrackSender {
     private readonly getSfu;
     private readonly getTrack;
-    start(): Promise<void>;
-    stop(): Promise<void>;
+    start: (() => Promise<void>) & {
+        untilComplete: () => Promise<void>;
+    };
+    stop: (() => Promise<void>) & {
+        untilComplete: () => Promise<void>;
+    };
+    get track(): MediaStreamTrack | null | undefined;
+    get isSending(): boolean;
     get location(): TrackLocation | undefined;
     constructor(getSfu: () => SFU, getTrack: () => Promise<MediaStreamTrack>);
     private context?;
-    private _location?;
-    private send;
-    private static pause;
+    private pause;
 }
 export declare type TrackLocation = {
     sfuId: SfuID;

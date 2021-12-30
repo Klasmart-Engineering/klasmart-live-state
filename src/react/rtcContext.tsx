@@ -83,70 +83,84 @@ export class StreamSender {
 }
 
 export class TrackSender {
-    public async start() {
-        const track = await this.getTrack();
+    public start = MergeConcurrentCalls(async () => {
+        await this.stop.untilComplete();
         if(!this.context) {
-            this.context = this.send(track);
+            const sfu = this.getSfu();
+            const track = await this.getTrack();
+            this.context = {
+                sfu,
+                producer: await sfu.createProducer(track)
+            };
         } else {
-            const { producer, sfu } = await this.context;
-            if(producer.track === track) { return; }
-            await producer.replaceTrack({track});
-            await TrackSender.pause(sfu, producer, false);
+            const { producer } = this.context;
+            if(!producer.track || producer.track.readyState === "ended") {
+                const track = await this.getTrack();
+                await producer.replaceTrack({track}).catch(e => console.error("failed to replace", e));
+            }
+            await this.pause(false);
         }
-    }
+    });
 
-    public async stop() {
+    public stop = MergeConcurrentCalls(async () => {
+        await this.start.untilComplete();
         if(!this.context) { return; }
-        const { producer, sfu } = await this.context;
-        producer.track?.stop();
+        const { producer } = this.context;
+        // producer.track?.stop();
         await producer.replaceTrack({track: null});
-        await TrackSender.pause(sfu, producer, true);
-    }
+        await this.pause(true);
+    });
 
-    public get location() { return this._location; }
+    public get track() { return this.context?.producer.track; }
+
+    public get isSending() { return Boolean(this.track && this.track.readyState === "live") ; }
+
+    public get location(): TrackLocation|undefined {
+        if(!this.context) { return; }
+        const { sfu, producer } = this.context;
+        return {
+            sfuId: sfu.id,
+            producerId: newProducerID(producer.id),
+        }; 
+    }
 
     public constructor(
         private readonly getSfu: () => SFU,
         private readonly getTrack: () => Promise<MediaStreamTrack>,
     ) {}
 
-    private context?: Promise<{ sfu: SFU, producer: MediaSoup.Producer }>;
-    private _location?: TrackLocation;
-    private async send(track: MediaStreamTrack, sfu = this.getSfu()) {
-        const producer = await sfu.createProducer(track);
-        this._location = { sfuId: sfu.id, producerId: newProducerID(producer.id) };
-        return { sfu, producer };
-    }
+    private context?: { sfu: SFU, producer: MediaSoup.Producer };
 
-    private static async pause(sfu: SFU, producer: MediaSoup.Producer, paused: boolean) {
-        if(producer.paused !== paused) {
-            const id = newProducerID(producer.id);
-            await sfu.localPause(id, paused);
-        }
+    private async pause(paused: boolean) {
+        if(!this.context) { return; }
+        const {sfu, producer} = this.context;
+        if(producer.paused === paused) { return; }
+        if(paused) { producer.pause(); } else { producer.resume(); }
+        paused ? producer.pause() : producer.resume();
+        const id = newProducerID(producer.id);
+        await sfu.localPause(id, paused);
     }
 }
 
 export type TrackLocation = { sfuId: SfuID, producerId: ProducerID }
 
-function microphoneGetter(getAudioContraints?: () => MediaStreamConstraints["audio"]) {
-    return createTrackCache(
-        () => audioTrack(
-            navigator.mediaDevices.getUserMedia({
-                audio: getAudioContraints?.() || true,
-            })
-        )
+const microphoneGetter = (
+    getAudioContraints?: () => MediaStreamConstraints["audio"]
+) => 
+    () => audioTrack(
+        navigator.mediaDevices.getUserMedia({
+            audio: getAudioContraints?.() || true,
+        })
     );
-}
 
-function cameraGetter(getVideoContraints?: () => MediaStreamConstraints["video"]) {
-    return createTrackCache(
-        () => videoTrack(
-            navigator.mediaDevices.getUserMedia({
-                video: getVideoContraints?.() || true,
-            })
-        )
+const cameraGetter = (
+    getVideoContraints?: () => MediaStreamConstraints["video"]
+) =>
+    () => videoTrack(
+        navigator.mediaDevices.getUserMedia({
+            video: getVideoContraints?.() || true,
+        })
     );
-}
 
 function screenCaptureGetter(getContraints?: () =>  DisplayMediaStreamConstraints|undefined) {
     return createCache(async (clearCache) => {
@@ -162,29 +176,16 @@ function screenCaptureGetter(getContraints?: () =>  DisplayMediaStreamConstraint
     });
 }
 
-function createTrackCache(getTrack: () => Promise<MediaStreamTrack>) {
-    return createCache(async (clearCache) => {
-        try {
-            const track = await getTrack();
-            track.addEventListener("ended", clearCache);
-            return track;
-        } catch (e) {
-            clearCache();
-            throw e;
-        }
-    });
-}
-
 const audioTrack = async (stream: Promise<MediaStream>) => firstTrack((await stream).getAudioTracks());
 const videoTrack = async (stream: Promise<MediaStream>) => firstTrack((await stream).getVideoTracks());
 function firstTrack(tracks: MediaStreamTrack[]) {
     const track = tracks[0];
     if(!track) { throw new Error("Could not get media track"); }
-    if(tracks.length > 1) { console.log(`Got ${tracks.length} media tracks, can only use 1`); }
+    if(tracks.length > 1) { console.info(`Got ${tracks.length} media tracks, can only use 1`); }
     return track;
 }
 
-type Initializer<T> = {(invalidateCache: {(): void}):T}
+type Initializer<T> = {(reset: {(): void}):T}
 function createCache<T>(initializeCache: Initializer<T> ): {():T} {
     let cache: T|undefined;
     let id = 0;
@@ -198,6 +199,24 @@ function createCache<T>(initializeCache: Initializer<T> ): {():T} {
         }
         return cache;
     };
+}
+
+function MergeConcurrentCalls<T>(f:{():Promise<T>}) {
+    let pending: Promise<T> | undefined;
+    function wrappedFunction() {
+        if(pending) { return pending; }
+        return f().finally(() => pending = undefined);
+    }
+    const untilComplete = async () => {
+        while(pending !== undefined) {
+            try {
+                await pending;
+            } catch {
+                /*Don't pass on error*/
+            }
+        }
+    };
+    return Object.freeze(Object.assign(wrappedFunction, {untilComplete}));
 }
 
 export const WebRtcContext = React.createContext<WebRtcManager>(null as any);

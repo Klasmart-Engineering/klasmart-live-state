@@ -1,7 +1,6 @@
 import { useContext, useMemo } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { useSelector } from "react-redux";
-import { newSfuID, ProducerID } from "../../network/sfu";
 import { State } from "../../redux/reducer";
 import { StreamSender, TrackLocation, TrackSender, WebRtcContext } from "../rtcContext";
 
@@ -10,18 +9,13 @@ export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender
 export const useScreenshare = (ctx = useContext(WebRtcContext)) => useStreamSender(ctx.screenshare, ctx);
 
 export const useStream = (
-    ids: ProducerID[],
+    audioLocation?: TrackLocation,
+    videoLocation?: TrackLocation,
     ctx = useContext(WebRtcContext),
 ) => {
-    const stream = useMemo(() => {
-        const stream = new MediaStream();
-        ids.map(producer => ctx
-            .getTrack({producerId: producer,sfuId: newSfuID("test-sfu")})
-            .then(t => stream.addTrack(t)),
-        );
-        return stream;
-    }, ids);
-    return stream;
+    const audioTrack = useAsync(async (l?: TrackLocation) => l && ctx.getTrack(l), [audioLocation]);
+    const videoTrack = useAsync(async (l?: TrackLocation) => l && ctx.getTrack(l), [videoLocation]);
+    return useMediaStreamTracks([audioTrack.result, videoTrack.result]);
 };
 
 export const useTrack = (
@@ -42,16 +36,29 @@ const useStreamSender = (
     stop: useAsyncCallback(() => streamSender.stop()),
     videoPaused: useTrackPauseState(streamSender.videoSender.location, ctx),
     audioPaused: useTrackPauseState(streamSender.audioSender.location, ctx),
+    stream: useMediaStreamTracks([streamSender.audioSender.track, streamSender.videoSender.track]),
 });
 
 const useTrackSender = (
     trackSender: TrackSender,
     ctx = useContext(WebRtcContext),
 ) => ({
+    isSending: trackSender.isSending,
+    paused: useTrackPauseState(trackSender.location, ctx),
+    stream: useMediaStreamTracks([trackSender.track]),
+    location: trackSender.location,
+
     start: useAsyncCallback(() => trackSender.start()),
     stop: useAsyncCallback(() => trackSender.stop()),
-    paused: useTrackPauseState(trackSender.location, ctx),
 });
+
+export const useMediaStreamTracks = (
+    tracks: Array<MediaStreamTrack|undefined|null>
+) => useMemo(() => {
+    const validTracks = filterFalsy(tracks);
+    if(validTracks.length <= 0) {return;}
+    return new MediaStream(validTracks);
+}, tracks);
 
 const useTrackPauseState = (
     location?: TrackLocation,
@@ -76,3 +83,6 @@ function useWebRtcState<T = unknown>(
         equalityCheck,
     );
 }
+
+const filterFalsy = <T extends object>(items: Array<T|undefined|null>) => 
+    items.filter((x): x is T => Boolean(x));

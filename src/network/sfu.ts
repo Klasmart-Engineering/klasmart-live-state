@@ -119,7 +119,7 @@ export class SFU {
         const track = this.tracks.get(id);
         const mediaTrack = track?.producer?.track || track?.consumer?.track;
         if (mediaTrack) { return mediaTrack; }
-        const consumer = await this.consumeTrack(id);
+        const consumer = await this.createConsumer(id);
         return consumer.track;
     }
     
@@ -131,7 +131,7 @@ export class SFU {
             track,
             zeroRtpOnPause: true,
             disableTrackOnPause: true,
-            stopTracks: true,
+            // stopTracks: true,
         });
         producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport(${producerTransport.id}) closed`));
         producer.on("trackended", () => console.log(`Producer(${producer.id}) ended`));
@@ -139,14 +139,14 @@ export class SFU {
         const id = producer.id as ProducerID;
         this.setTrack(id, {
             producer,
-            localPause: producer.paused,
+            localPause: true,
             globalPause: false
         });
-        if(producer.paused) { await this.localPause(id, false); }
+        await this.localPause(id, false);
         return producer;
     }
 
-    private async consumeTrack(producerId: ProducerID) {
+    private async createConsumer(producerId: ProducerID) {
         const consumerTransport = await this.consumerTransport();
         await this.sendRtpCapabilities();
         const response = await this.request({ createConsumer: { producerId } });
@@ -157,9 +157,9 @@ export class SFU {
         consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s Transport(${consumerTransport.id}) closed`));
         consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
 
-        this.setTrack(producerId as ProducerID, {
+        this.setTrack(producerId, {
             consumer,
-            localPause: consumer.paused,
+            localPause: true,
             globalPause: false
         });
         this.request({locallyPause: {id: producerId, paused: false}});
@@ -244,7 +244,7 @@ export class SFU {
     private generateRequestId() { return `${this._requestId++}` as RequestID; }
 
     private onTransportStateChange(state: TransportState) {
-        console.log(`Transport state changed to ${state}`);
+        console.info(`Transport state changed to ${state}`);
     }
 
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
@@ -302,8 +302,7 @@ export class SFU {
 
     private handlePauseMessage({ id: producerId, localPause, globalPause }: PauseMessage) {
         const track = this.tracks.get(producerId);
-        console.log("pause", track, localPause, globalPause);
-        if (!track) { return console.error(`Could not find Track(${producerId}) to pause/resume producer`); }
+        if (!track) { return console.error(`Could not find Track(${producerId}) to pause/resume`); }
 
         track.localPause = localPause;
         track.globalPause = globalPause;
