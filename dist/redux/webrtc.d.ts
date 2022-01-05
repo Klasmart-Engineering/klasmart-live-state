@@ -1,9 +1,9 @@
 import { CaseReducer, PayloadAction } from "@reduxjs/toolkit";
-import { ProducerID, SfuID } from "../network/sfu";
+import { ProducerId, SfuId } from "../network/sfu";
 import { types as MediaSoup } from "mediasoup-client";
 import { ValueOf } from "../types";
 export declare type WebRtcState = {
-    sfus: Record<SfuID, SfuState>;
+    sfus: Record<SfuId, SfuState>;
     videoInputs: MediaDeviceInfo[];
     audioInputs: MediaDeviceInfo[];
     audioOutputs: MediaDeviceInfo[];
@@ -11,7 +11,7 @@ export declare type WebRtcState = {
 export declare type SfuState = {
     consumerConnectionState?: MediaSoup.ConnectionState;
     producerConnectionState?: MediaSoup.ConnectionState;
-    tracks: Record<ProducerID, TrackStatus>;
+    tracks: Record<ProducerId, TrackStatus>;
 };
 export declare type TrackStatus = {
     localPause: boolean;
@@ -22,40 +22,40 @@ declare type Reducer<P = void, T extends string = string> = CaseReducer<WebRtcSt
 export declare const webRtcSliceActionPrefix = "webrtc";
 declare const webrtcSlice: import("@reduxjs/toolkit").Slice<WebRtcState, {
     closeTrack: Reducer<{
-        id: SfuID;
-        producerId: ProducerID;
+        id: SfuId;
+        producerId: ProducerId;
     }, string>;
     setTrack: Reducer<{
-        id: SfuID;
-        producerId: ProducerID;
+        id: SfuId;
+        producerId: ProducerId;
         status: TrackStatus;
     }, string>;
     setConsumerConnectionStatus: Reducer<{
-        id: SfuID;
+        id: SfuId;
         connectionState: MediaSoup.ConnectionState;
     }, string>;
     setProducerConnectionStatus: Reducer<{
-        id: SfuID;
+        id: SfuId;
         connectionState: MediaSoup.ConnectionState;
     }, string>;
     setDevices: Reducer<MediaDeviceInfo[], string>;
 }, "webrtc">;
 export declare const webrtcActions: import("@reduxjs/toolkit").CaseReducerActions<{
     closeTrack: Reducer<{
-        id: SfuID;
-        producerId: ProducerID;
+        id: SfuId;
+        producerId: ProducerId;
     }, string>;
     setTrack: Reducer<{
-        id: SfuID;
-        producerId: ProducerID;
+        id: SfuId;
+        producerId: ProducerId;
         status: TrackStatus;
     }, string>;
     setConsumerConnectionStatus: Reducer<{
-        id: SfuID;
+        id: SfuId;
         connectionState: MediaSoup.ConnectionState;
     }, string>;
     setProducerConnectionStatus: Reducer<{
-        id: SfuID;
+        id: SfuId;
         connectionState: MediaSoup.ConnectionState;
     }, string>;
     setDevices: Reducer<MediaDeviceInfo[], string>;

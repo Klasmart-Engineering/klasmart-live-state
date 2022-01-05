@@ -1,8 +1,10 @@
-import { useContext, useMemo } from "react";
+import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { useSelector } from "react-redux";
+import { TrackLocation } from "../../network/sfu";
+import { TrackSender } from "../../network/trackSender";
 import { State } from "../../redux/reducer";
-import { StreamSender, TrackLocation, TrackSender, WebRtcContext } from "../rtcContext";
+import { StreamSender, WebRtcContext } from "../rtcContext";
 
 export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.camera, ctx);
 export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone, ctx);
@@ -23,9 +25,9 @@ export const useTrack = (
     ctx = useContext(WebRtcContext),
 ) => ({
     track: useAsync((l: TrackLocation) => ctx.getTrack(l), [location]),
-    paused: useTrackPauseState(location, ctx),
-    localPause: useAsyncCallback((paused: boolean) => ctx.localPause(location, paused)),
-    globalPause: useAsyncCallback((paused: boolean) => ctx.globalPause(location, paused)),
+    paused: useTrackSenderPauseState(location, ctx),
+    localPause: useAsyncCallback((paused: boolean) => ctx.pause(location, paused)),
+    globalPause: useAsyncCallback((paused: boolean) => ctx.pauseForEveryone(location, paused)),
 });
 
 const useStreamSender = (
@@ -34,8 +36,8 @@ const useStreamSender = (
 ) => ({
     start: useAsyncCallback(() => streamSender.start()),
     stop: useAsyncCallback(() => streamSender.stop()),
-    videoPaused: useTrackPauseState(streamSender.videoSender.location, ctx),
-    audioPaused: useTrackPauseState(streamSender.audioSender.location, ctx),
+    videoPaused: useTrackSenderPauseState(streamSender.videoSender, ctx),
+    audioPaused: useTrackSenderPauseState(streamSender.audioSender, ctx),
     stream: useMediaStreamTracks([streamSender.audioSender.track, streamSender.videoSender.track]),
 });
 
@@ -44,13 +46,34 @@ const useTrackSender = (
     ctx = useContext(WebRtcContext),
 ) => ({
     isSending: trackSender.isSending,
-    paused: useTrackPauseState(trackSender.location, ctx),
+    paused: useTrackSenderPauseState(trackSender, ctx),
     stream: useMediaStreamTracks([trackSender.track]),
-    location: trackSender.location,
 
     start: useAsyncCallback(() => trackSender.start()),
     stop: useAsyncCallback(() => trackSender.stop()),
 });
+
+const useTrackSenderPauseState = (
+    trackSender: TrackSender,
+    ctx = useContext(WebRtcContext),
+) => {
+    const [,forceRerender] = useReducer(i=>i++, 0);
+    useEffect(() => {
+        trackSender.on("sourcePauseChange", forceRerender);
+        trackSender.on("broadcastPauseChange", forceRerender);
+        trackSender.on("sinkPauseChange", forceRerender);
+        return () => {
+            trackSender.off("sourcePauseChange", forceRerender);
+            trackSender.off("broadcastPauseChange", forceRerender);
+            trackSender.off("sinkPauseChange", forceRerender);
+        };
+    });
+    return {
+        "sourcePaused": trackSender.sourceIsPaused,
+        "broadcastPaused": trackSender.broadcastIsPaused,
+        "sinkPaused": trackSender.sinkIsPaused,
+    };
+};
 
 export const useMediaStreamTracks = (
     tracks: Array<MediaStreamTrack|undefined|null>
@@ -59,19 +82,6 @@ export const useMediaStreamTracks = (
     if(validTracks.length <= 0) {return;}
     return new MediaStream(validTracks);
 }, tracks);
-
-const useTrackPauseState = (
-    location?: TrackLocation,
-    ctx = useContext(WebRtcContext),
-) => useWebRtcState(
-    s => {
-        if(!location) {return;}
-        const { sfuId: sfu, producerId: producer } = location;
-        return s.webrtc.sfus[sfu]?.tracks[producer];
-    },
-    undefined,
-    ctx,
-);
 
 function useWebRtcState<T = unknown>(
     selector: (state: State) => T,

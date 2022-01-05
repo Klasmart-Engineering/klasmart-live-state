@@ -1,6 +1,6 @@
 import React, { ReactNode, useEffect, useMemo } from "react";
 import { useStore } from "react-redux";
-import { SfuID } from "../network/sfu";
+import { SfuId } from "../network/sfu";
 import { Action, State } from "../redux/reducer";
 import { webrtcActions } from "../redux/webrtc";
 import { WebRtcContext, WebRtcManager } from "./rtcContext";
@@ -8,7 +8,7 @@ import { WebRtcContext, WebRtcManager } from "./rtcContext";
 export interface WebRtcProviderProps<ApplicationState = unknown> {
   children?: ReactNode;
   selector: (state: ApplicationState) => State;
-  getSfuUrl: (id: SfuID) => URL;
+  getSfuUrl: (id: SfuId) => URL;
 }
 
 export function WebRtcProvider<ApplicationState = unknown>({

@@ -1,10 +1,10 @@
 import { createSlice, CaseReducer, PayloadAction } from "@reduxjs/toolkit";
-import { ProducerID, SfuID } from "../network/sfu";
+import { ProducerId, SfuId } from "../network/sfu";
 import { types as MediaSoup } from "mediasoup-client";
 import { ValueOf } from "../types";
 
 export type WebRtcState = {
-    sfus: Record<SfuID, SfuState>
+    sfus: Record<SfuId, SfuState>
 
     videoInputs: MediaDeviceInfo[]
     audioInputs: MediaDeviceInfo[]
@@ -14,7 +14,7 @@ export type WebRtcState = {
 export type SfuState = {
     consumerConnectionState?: MediaSoup.ConnectionState
     producerConnectionState?: MediaSoup.ConnectionState
-    tracks: Record<ProducerID, TrackStatus>
+    tracks: Record<ProducerId, TrackStatus>
 }
 
 export type TrackStatus = {
@@ -55,14 +55,14 @@ const setDevices: Reducer<MediaDeviceInfo[]> = (state, { payload: devices }) => 
 
 type Reducer<P = void, T extends string = string> = CaseReducer<WebRtcState, PayloadAction<P, T>>;
 
-const closeTrack: Reducer<{ id: SfuID, producerId: ProducerID }> = (state, { payload: { id, producerId } }) => {
+const closeTrack: Reducer<{ id: SfuId, producerId: ProducerId }> = (state, { payload: { id, producerId } }) => {
     const sfu = state.sfus[id];
     if (sfu) {
         delete sfu.tracks[producerId];
     }
 };
 
-const setTrack: Reducer<{ id: SfuID, producerId: ProducerID, status: TrackStatus }> = (state, { payload: { id, producerId, status } }) => {
+const setTrack: Reducer<{ id: SfuId, producerId: ProducerId, status: TrackStatus }> = (state, { payload: { id, producerId, status } }) => {
     const sfu = state.sfus[id];
     if (sfu) {
         sfu.tracks[producerId] = status;
@@ -75,7 +75,7 @@ const setTrack: Reducer<{ id: SfuID, producerId: ProducerID, status: TrackStatus
     }
 };
 
-const setConsumerConnectionStatus: Reducer<{ id: SfuID, connectionState: MediaSoup.ConnectionState }> = (state, { payload: { id, connectionState } }) => {
+const setConsumerConnectionStatus: Reducer<{ id: SfuId, connectionState: MediaSoup.ConnectionState }> = (state, { payload: { id, connectionState } }) => {
     const sfu = state.sfus[id];
     if (sfu) {
         sfu.consumerConnectionState = connectionState;
@@ -87,7 +87,7 @@ const setConsumerConnectionStatus: Reducer<{ id: SfuID, connectionState: MediaSo
     }
 };
 
-const setProducerConnectionStatus: Reducer<{ id: SfuID, connectionState: MediaSoup.ConnectionState }> = (state, { payload: { id, connectionState } }) => {
+const setProducerConnectionStatus: Reducer<{ id: SfuId, connectionState: MediaSoup.ConnectionState }> = (state, { payload: { id, connectionState } }) => {
     const sfu = state.sfus[id];
     if (sfu) {
         sfu.producerConnectionState = connectionState;
