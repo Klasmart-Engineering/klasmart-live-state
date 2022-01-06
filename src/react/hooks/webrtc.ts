@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
-import { ConsumerState, ProducerState, TrackLocation } from "../../network/sfu";
+import { Track, TrackLocation } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { StreamSender, WebRtcContext } from "../rtcContext";
 
@@ -32,11 +32,11 @@ const useStreamSender = (
 ) => ({
     start: useAsyncCallback(() => streamSender.start()),
     stop: useAsyncCallback(() => streamSender.stop()),
-    videoPaused: useProducerPauseState(streamSender.videoSender.state),
-    audioPaused: useProducerPauseState(streamSender.audioSender.state),
+    videoPaused: useProducerPauseState(streamSender.videoSender.track),
+    audioPaused: useProducerPauseState(streamSender.audioSender.track),
     stream: useMediaStreamTracks(filterFalsy([
-        streamSender.audioSender.state?.track,
-        streamSender.videoSender.state?.track,
+        streamSender.audioSender.track?.track,
+        streamSender.videoSender.track?.track,
     ])),
 });
 
@@ -44,54 +44,48 @@ const useTrackSender = (
     trackSender: TrackSender,
 ) => {
     return {
-        paused: useProducerPauseState(trackSender.state),
-        stream: useMediaStreamTracks(filterFalsy([trackSender.state?.track])),
-        start: useAsyncCallback(() => trackSender.start()),
-        stop: useAsyncCallback(() => trackSender.stop()),
+        paused: useProducerPauseState(trackSender.track),
+        stream: useMediaStreamTracks(filterFalsy([trackSender.track?.track])),
+
     };
 };
 
-const useProducerPauseState = (
-    state?: ProducerState,
+const useTrackPauseState = (
+    track?: Track,
 ) => {
     const rerender = useRerender();
     
     useEffect(() => {
-        if(!state) { return; }
-        state.on("locallyPaused", rerender);
-        state.on("broadcastIsPaused", rerender);
+        if(!track) { return; }
+        track.on("locallyPaused", rerender);
+        track.on("sourceIsPaused", rerender);
+        track.on("broadcastIsPaused", rerender);
+        track.on("sinkIsPaused", rerender);
         return () => {
-            state.off("locallyPaused", rerender);
-            state.off("broadcastIsPaused", rerender);
+            track.off("locallyPaused", rerender);
+            track.off("sourceIsPaused", rerender);
+            track.off("broadcastIsPaused", rerender);
+            track.off("sinkIsPaused", rerender);
         };
     });
 
-    return {
-        locallyPaused: state?.sourceIsPaused,
-        broadcastPaused: state?.broadcastIsPaused,
-    };
-};
 
-const useConsumerPauseState = (
-    state: ConsumerState,
-) => {
-    const rerender = useRerender();
+    const start = useAsyncCallback(() => track?.start());
+    // const globalPause = useAsyncCallback(() => track?.requestBroadcastStateChange(true));
+    // const globalResume = useAsyncCallback(() => track?.requestBroadcastStateChange(false));
+    const stop = useAsyncCallback(() => track?.stop());
+
     
-    useEffect(() => {
-        state.on("sourceIsPaused", rerender);
-        state.on("broadcastIsPaused", rerender);
-        state.on("sinkIsPaused", rerender);
-        return () => {
-            state.off("sourceIsPaused", rerender);
-            state.off("broadcastIsPaused", rerender);
-            state.off("sinkIsPaused", rerender);
-        };
-    });
-
+    if(!track) { return; }
+    const {
+        sourceIsPaused,
+        broadcastIsPaused,
+        sinkIsPaused,   
+    } = track;
     return {
-        sourcePaused: state.sourceIsPaused,
-        broadcastPaused: state.broadcastIsPaused,
-        sinkIsPaused: state.sinkIsPaused,
+        sourceIsPaused,
+        broadcastIsPaused,
+        sinkIsPaused,
     };
 };
 

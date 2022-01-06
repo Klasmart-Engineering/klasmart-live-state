@@ -1,19 +1,17 @@
-import { ProducerState, SFU } from "./sfu";
+import { Producer, SFU } from "./sfu";
 
 export class TrackSender {
     public async start() {
-        if(this.state) {
-            await this.state.start(this.getTrack);
+        if(this.track) {
+            await this.track.start();
         } else {
             const sfu = this.getSfu();
-            const media = await this.getTrack();
-            this._state = await sfu.createProducer(media, this.name);
+            this.track = await sfu.produceTrack(this.getTrack, this.name);
         }
     }
     
-    public async stop() { await this.state?.stop(); }
+    public async stop() { await this.track?.stop(); }
 
-    public get state() { return this._state; }
 
     public constructor (
         private readonly getSfu: () => SFU,
@@ -21,6 +19,6 @@ export class TrackSender {
         private readonly name: string,
     ) {}
 
-    private _state?: ProducerState;
+    private track?: Producer;
 }
 
