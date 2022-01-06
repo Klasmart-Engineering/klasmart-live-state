@@ -11,13 +11,13 @@
  * the mutex to unlock without aquiring the mutex.
  */
 
-export function MergingMutex<T>(f:{():Promise<T>}) {
+export function MergingMutex<T, Args extends unknown[]>(f: (...args: Args) => Promise<T>) {
     let mutex: Promise<T> | undefined;
     const waitUntilUnlock = async () => {
         while(await mutex?.then(() => true, () => true)); 
     };
     return Object.assign(
-        () => mutex ||= f().finally(() => mutex = undefined),
+        (...args: Args) => mutex ||= f(...args).finally(() => mutex = undefined),
         Object.freeze({ waitUntilUnlock }),
     );
 }

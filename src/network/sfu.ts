@@ -7,6 +7,7 @@ import { Action } from "../redux/reducer";
 import { webrtcActions } from "../redux/webrtc";
 import { ExecuteOnce } from "../executeOnce";
 import EventEmitter from "eventemitter3";
+import { MergingMutex } from "../mergingMutex";
 
 export type SfuId = NewType<string, "sfuId">
 export const newSfuID = (id: string) => id as SfuId;
@@ -119,34 +120,40 @@ export class SFU {
         this.ws.connect().catch(e => console.error(e));
     }
     
-    private readonly states = new Map<ProducerId, ProducerStateWriteable|ConsumerStateWriteable>();
+    private readonly states = new Map<ProducerId, ProducerStateRemote|ConsumerStateRemote>();
     public async createProducer(track: MediaStreamTrack, name: string) {
         const producerTransport = await this.producerTransport();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
         
-        const producer = new ProducerStateWriteable(
-            this, //TODO: move?
-            await producerTransport.produce({
-                track: track,
-                zeroRtpOnPause: true,
-                disableTrackOnPause: true,
-                appData: name,
-            })
+        const producer = await producerTransport.produce({
+            track,
+            zeroRtpOnPause: true,
+            disableTrackOnPause: true,
+            appData: name,
+        });
+        
+        const state = new ProducerStateRemote(
+            producer,
+            (id: ProducerId, paused: boolean) => this.changeBroadcastState(id,paused)
         );
-        this.states.set(producer.id, producer);
-        await this.setPauseState(producer.id, false);
-        return producer.getObserver();
+        this.states.set(state.id, state);
+        state.on("locallyPaused", (id, p) => this.setPauseState(id, p));
+
+        await this.setPauseState(state.id, false);
+
+        return state.getObserver();
     }
 
     private async createConsumer(producerId: ProducerId) {
         {
             const state = this.states.get(producerId);
             if(state instanceof ProducerState) { throw new Error("Can not consume a track that is produced locally"); }
-            if(state instanceof ConsumerStateWriteable) { return state; }
+            if(state instanceof ConsumerStateRemote) { return state; }
         }
-        const state = new ConsumerStateWriteable();
+        const state = new ConsumerStateRemote();
         this.states.set(producerId, state);
+        state.on("locallyPaused", (id, p) => this.setPauseState(id, p));
 
         const consumerTransport = await this.consumerTransport();
         await this.sendRtpCapabilities();
@@ -288,7 +295,7 @@ export class SFU {
 
     private onSourcePaused({ producerId, paused }: PauseEvent) { 
         const state = this.states.get(producerId);
-        if(state instanceof ConsumerStateWriteable) { state.sourceIsPaused = paused; }
+        if(state instanceof ConsumerStateRemote) { state.sourceIsPaused = paused; }
     }
     private onBroadcastPaused({ producerId, paused }: PauseEvent) {
         const state = this.states.get(producerId);
@@ -296,26 +303,48 @@ export class SFU {
     }
     private onSinkPaused({ producerId, paused }: PauseEvent) {
         const state = this.states.get(producerId);
-        if(state instanceof ConsumerStateWriteable) { state.sinkIsPaused = paused; }
+        if(state instanceof ConsumerStateRemote) { state.sinkIsPaused = paused; }
     }
 }
 
 export class ProducerState {
-    public get producer() { return this._producer; }
-    public get id() { return newProducerID(this.producer.id); }
-    public get sourceIsPaused() { return this.producer.paused; }
+    public get track() { return this._producer.track; }
+    public get id() { return newProducerID(this._producer.id); }
+    public get sourceIsPaused() { return this._producer.paused; }
     public get broadcastIsPaused() { return this._broadcastIsPaused; }
 
+    public readonly on: EventEmitter<ProducerStateEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
+    public readonly off: EventEmitter<ProducerStateEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
+
+    public start = MergingMutex(async (
+        getTrack: () => Promise<MediaStreamTrack>,
+    ) => {
+        await this.stop.waitUntilUnlock();
+        if(this.track?.readyState !== "live") {
+            await this._producer.replaceTrack({track: await getTrack()});
+        }
+        if(this._producer.paused) {
+            await this._producer.resume();
+            this.emitter.emit("locallyPaused", this.id, false);
+        }
+    });
+
+    public stop = MergingMutex(async () => {
+        await this.start.waitUntilUnlock();
+        if(!this._producer.paused) {
+            await this._producer.replaceTrack({track: null});
+            await this._producer.pause();
+            this.emitter.emit("locallyPaused", this.id, true);
+        }
+    });
+
     public constructor(
-        public sfu: SFU,
-        protected _producer: MediaSoup.Producer,
+        protected readonly _producer: MediaSoup.Producer,
+        public readonly requestBroadcastStateChange: (id: ProducerId, paused: boolean) => Promise<void|Result>
     ) {
         _producer.on("transportclose", () => console.log(`Producer(${_producer.id})'s Transport closed`));
         _producer.on("trackended", () => console.log(`Producer(${_producer.id}) ended`));
     }
-
-    public readonly on: EventEmitter<ProducerStateEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
-    public readonly off: EventEmitter<ProducerStateEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
     
     protected getState() { return this; }
     protected readonly emitter = new EventEmitter<ProducerStateEventMap>();
@@ -323,11 +352,11 @@ export class ProducerState {
 }
 
 
-class ProducerStateWriteable extends ProducerState {
+class ProducerStateRemote extends ProducerState {
     public getObserver() { return this.getState(); }
-    
-    public close() { this.producer.close(); }
 
+    public close() { this._producer.close(); }
+    
     public override set broadcastIsPaused(pause: boolean) {
         if(this.broadcastIsPaused === pause) { return; }
         this.broadcastIsPaused = pause;
@@ -337,16 +366,28 @@ class ProducerStateWriteable extends ProducerState {
 
 export type ProducerStateEventMap = {
     close: () => void,
-    sourceIsPaused: (paused?: boolean) => void,
-    broadcastIsPaused: (paused?: boolean) => void,
+
+    locallyPaused: (id: ProducerId, paused: boolean) => void,
+
+    broadcastIsPaused: (paused: boolean) => void,
 }
 
 export class ConsumerState {
     public get consumer() { return this._consumer; }
-    public get id() { return this._consumer && newProducerID(this._consumer.producerId); }
+    public get id() {
+        if(!this._consumer) {throw new Error("Consumer has not yet initialized."); }
+        return newProducerID(this._consumer.producerId);
+    }
+    
     public get sourceIsPaused() { return this._sourceIsPaused; }
     public get broadcastIsPaused() { return this._broadcastIsPaused; }
     public get sinkIsPaused() { return this._sinkIsPaused; }
+
+    public async start() {
+        if(!this._consumer || !this._consumer.paused) { return; }
+        await this._consumer.resume();
+        this.emitter.emit("locallyPaused", this.id, false);
+    }
 
     public readonly on: EventEmitter<ConsumerStateEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
     public readonly off: EventEmitter<ConsumerStateEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
@@ -359,7 +400,7 @@ export class ConsumerState {
     protected _sinkIsPaused?: boolean;
 }
 
-export class ConsumerStateWriteable extends ConsumerState {
+export class ConsumerStateRemote extends ConsumerState {
     public getObserver() { return this.getState(); }
     
     public close() { this.consumer.close(); }
@@ -392,7 +433,10 @@ export class ConsumerStateWriteable extends ConsumerState {
 
 export type ConsumerStateEventMap = {
     close: () => void,
-    sourceIsPaused: (paused?: boolean) => void,
-    broadcastIsPaused: (paused?: boolean) => void,
-    sinkIsPaused: (paused?: boolean) => void,
+
+    locallyPaused: (id: ProducerId, paused: boolean) => void,
+    
+    sourceIsPaused: (paused: boolean) => void,
+    broadcastIsPaused: (paused: boolean) => void,
+    sinkIsPaused: (paused: boolean) => void,
 }
