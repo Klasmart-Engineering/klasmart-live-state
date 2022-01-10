@@ -13,7 +13,10 @@ export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) =>
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
-    location: TrackLocation;
+    location: {
+        sfuId: SfuId;
+        producerId: ProducerId;
+    } | undefined;
     globalPause: import("react-async-hook").UseAsyncReturn<void | {
         routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
         producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
@@ -37,7 +40,10 @@ export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
-    location: TrackLocation;
+    location: {
+        sfuId: SfuId;
+        producerId: ProducerId;
+    } | undefined;
     globalPause: import("react-async-hook").UseAsyncReturn<void | {
         routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
         producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
@@ -93,5 +99,5 @@ export declare const useTrack: (location?: TrackLocation | undefined, ctx?: impo
         } | undefined;
     } | undefined, [paused: boolean]>;
 };
-export declare const useMediaStreamTracks: (tracks: Array<MediaStreamTrack>) => MediaStream | undefined;
+export declare const useMediaStreamTracks: (...tracks: Array<MediaStreamTrack | null | undefined>) => MediaStream | undefined;
 //# sourceMappingURL=webrtc.d.ts.map

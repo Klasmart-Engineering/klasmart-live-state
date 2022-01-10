@@ -151,7 +151,6 @@ export declare class Producer extends Track {
     constructor(producer: MediaSoup.Producer, getTrack: () => Promise<MediaStreamTrack>, requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
 }
 export declare class Consumer extends Track {
-    private consumerPromise;
     get id(): ProducerId;
     get kind(): "audio" | "video" | undefined;
     get track(): MediaStreamTrack | undefined;
@@ -162,7 +161,8 @@ export declare class Consumer extends Track {
     set sourceIsPaused(paused: boolean);
     set broadcastIsPaused(pause: boolean);
     set sinkIsPaused(pause: boolean);
-    constructor(consumerPromise: Promise<MediaSoup.Consumer>, requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
+    constructor(consumer: Promise<MediaSoup.Consumer>, requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
+    private consumerPromise;
     private consumer?;
 }
 export declare type TrackEventMap = {

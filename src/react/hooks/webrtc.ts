@@ -17,7 +17,10 @@ export const useStream = (
 ) => {
     const audioTrack = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l))?.track, [audioLocation]);
     const videoTrack = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l))?.track, [videoLocation]);
-    return useMediaStreamTracks(filterFalsy([audioTrack.result, videoTrack.result]));
+    return useMediaStreamTracks(
+        audioTrack.result,
+        videoTrack.result,
+    );
 };
 
 export const useTrack = (
@@ -27,7 +30,7 @@ export const useTrack = (
     const track = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l)), [location]);
 
     return {
-        stream: useMediaStreamTracks(filterFalsy([track.result?.track])),
+        stream: useMediaStreamTracks(track.result?.track),
         kind: track.result?.kind,
         pause: useTrackPauseState(track.result),
         start: useAsyncCallback(async () => (await track.currentPromise)?.start()),
@@ -43,18 +46,19 @@ const useStreamSender = (
     stop: useAsyncCallback(() => streamSender.stop()),
     videoPaused: useTrackPauseState(streamSender.videoSender.producer),
     audioPaused: useTrackPauseState(streamSender.audioSender.producer),
-    stream: useMediaStreamTracks(filterFalsy([
+    stream: useMediaStreamTracks(
         streamSender.audioSender.producer?.track,
         streamSender.videoSender.producer?.track,
-    ])),
+    ),
 });
 
 const useTrackSender = (
     trackSender: TrackSender,
 ) => {
+    console.log("useTrackSender", trackSender);
     return {
         paused: useTrackPauseState(trackSender.producer),
-        stream: useMediaStreamTracks(filterFalsy([trackSender.producer?.track])),
+        stream: useMediaStreamTracks(trackSender.producer?.track),
         start: useAsyncCallback(() => trackSender.start()),
         stop: useAsyncCallback(() => trackSender.producer?.stop()),
         location: trackSender.location,
@@ -65,15 +69,21 @@ const useTrackSender = (
 const useTrackPauseState = (
     track?: Track,
 ) => {
-    const rerender = useRerender();
+    const _rerender = useRerender();
+    const rerender = (e: any) => {
+        console.log(`Rerender track(${track?.track?.id})`, e);
+        _rerender();
+    };
     
     useEffect(() => {
         if(!track) { return; }
+        console.log(`track(${track?.track?.id}) - listen on`);
         track.on("locallyPaused", rerender);
         track.on("sourceIsPaused", rerender);
         track.on("broadcastIsPaused", rerender);
         track.on("sinkIsPaused", rerender);
         return () => {
+            console.log(`track(${track?.track?.id}) - listen off`);
             track.off("locallyPaused", rerender);
             track.off("sourceIsPaused", rerender);
             track.off("broadcastIsPaused", rerender);
@@ -90,10 +100,11 @@ const useTrackPauseState = (
 };
 
 export const useMediaStreamTracks = (
-    tracks: Array<MediaStreamTrack>
+    ...tracks: Array<MediaStreamTrack | null | undefined>
 ) => useMemo(() => {
-    if(tracks.length <= 0) {return;}
-    return new MediaStream(tracks);
+    const validTracks = filterFalsy(tracks);
+    if(validTracks.length <= 0) {return;}
+    return new MediaStream(validTracks);
 }, tracks);
 
 const useRerender = () => useReducer(i => i + 1, 0)[1];

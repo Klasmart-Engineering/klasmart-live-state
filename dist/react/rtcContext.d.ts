@@ -1,8 +1,9 @@
 import { Store } from "@reduxjs/toolkit";
 import React from "react";
 import { TrackSender } from "../network/trackSender";
-import { SFU, SfuId, TrackLocation } from "../network/sfu";
+import { SFU, SfuId } from "../network/sfu";
 import { Action, State } from "../redux/reducer";
+import { TrackLocation } from "./hooks/webrtc";
 export declare class WebRtcManager {
     readonly store: Store<unknown, Action>;
     readonly selector: (s: unknown) => State;

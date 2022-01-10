@@ -108,7 +108,12 @@ export class SFU {
         getTrack: () => Promise<MediaStreamTrack>,
         name: string
     ) {
-        const producer = await this.createProducer(getTrack, name);
+        const producer: Producer = new Producer(
+            await this.createProducer(getTrack, name),
+            getTrack,
+            (paused: boolean) => this.changeBroadcastState(producer.id,paused),
+        );
+        producer.on("locallyPaused", (id, p) => this.setPauseState(id, p));
         this.tracks.set(producer.id, producer);
         await this.setPauseState(producer.id, false);
         return producer;
@@ -116,9 +121,12 @@ export class SFU {
 
     public async consumeTrack(producerId: ProducerId) {
         if(this.tracks.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
-        const consumer = await this.createConsumer(producerId);
+        const consumer: Consumer = new Consumer(
+            this.createConsumer(producerId),
+            (paused: boolean) => this.changeBroadcastState(consumer.id,paused),
+        );
+        consumer.on("locallyPaused", (id, p) => this.setPauseState(id, p));
         this.tracks.set(producerId, consumer);
-        await this.setPauseState(producerId, false);
         return consumer;
     }
 
@@ -155,19 +163,12 @@ export class SFU {
         const track = await getTrack();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
-
-        const producer: Producer = new Producer(
-            await producerTransport.produce({
-                track,
-                zeroRtpOnPause: true,
-                disableTrackOnPause: true,
-                appData: name,
-            }),
-            getTrack,
-            (paused: boolean) => this.changeBroadcastState(producer.id,paused),
-        );
-        producer.on("locallyPaused", (id, p) => this.setPauseState(id, p));
-        return producer;
+        return await producerTransport.produce({
+            track,
+            zeroRtpOnPause: true,
+            disableTrackOnPause: true,
+            appData: {name},
+        });
     }
 
     private async createConsumer(producerId: ProducerId) {
@@ -176,12 +177,9 @@ export class SFU {
         const response = await this.request({ consumeTrack: { producerId } });
         if (!response) { throw new Error(`Received empty response from SFU when trying to consume producerId(${producerId})`); }
         if (!response.consumerCreated) { throw new Error(`Received response without consumer parameters from SFU when trying to consume producerId(${producerId})`); }
-        
-        const consumer: Consumer = new Consumer(
-            consumerTransport.consume(response.consumerCreated),
-            (paused: boolean) => this.changeBroadcastState(consumer.id,paused),
-        );
-        consumer.on("locallyPaused", (id, p) => this.setPauseState(id, p));
+        console.log(response);
+        const consumer = await consumerTransport.consume(response.consumerCreated);
+        await this.setPauseState(producerId, false);
         return consumer;
     }
 
@@ -190,6 +188,7 @@ export class SFU {
     }
 
     public async setPauseState(id: ProducerId, paused: boolean) {
+        console.log("setPauseState");
         return this.request({pause: {id, paused}});
     }
 
@@ -223,7 +222,7 @@ export class SFU {
         transport.on("produce", async (produceTrack, callback, error) => {
             try {
                 // TODO: name?
-                console.log(produceTrack);
+                console.log("producer", produceTrack);
                 const response = await this.request({ produceTrack });
                 if(!response) { return error("Empty response from SFU"); }
                 const { producerCreated } = response;
@@ -234,6 +233,7 @@ export class SFU {
             }
         });
         transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
+            console.log("connectionstatechange", connectionState);
             const action = webrtcActions.setProducerConnectionStatus({ id: this.id, connectionState });
             this.store.dispatch(action);
         });
@@ -317,12 +317,13 @@ export class SFU {
         if(track instanceof Consumer) { track.sourceIsPaused = paused; }
     }
     private onBroadcastPaused({ producerId, paused }: PauseEvent) {
-        const state = this.tracks.get(producerId);
-        if(state) { state.broadcastIsPaused = paused; }
+        const track = this.tracks.get(producerId);
+        if(track) { track.broadcastIsPaused = paused; }
     }
     private onSinkPaused({ producerId, paused }: PauseEvent) {
-        const state = this.tracks.get(producerId);
-        if(state instanceof Consumer) { state.sinkIsPaused = paused; }
+        const track = this.tracks.get(producerId);
+        console.log("onSinkPaused", track, producerId, paused);
+        if(track instanceof Consumer) { track.sinkIsPaused = paused; }
     }
 }
 
@@ -350,7 +351,9 @@ export abstract class Track {
 
     public constructor(
         public readonly requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>
-    ) {}
+    ) {
+        console.log("track constructor");
+    }
 }
 
 export class Producer extends Track {
@@ -394,6 +397,7 @@ export class Producer extends Track {
         requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>
     ) {
         super(requestBroadcastStateChange);
+        console.log("producer constructor", producer);
         producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport closed`));
         producer.on("trackended", () => console.log(`Producer(${producer.id}) ended`));
     }
@@ -409,10 +413,13 @@ export class Consumer extends Track {
     public get locallyPaused() { return this.consumer?.paused || true; }
     
     public async start() {
+        console.log("consumer start - await");
         const consumer = await this.consumerPromise;
+        console.log("consumer start - for reals this time", consumer);
 
         if(!consumer.paused) { return; }
         await consumer.resume();
+        console.log("consumer start - resume", consumer);
         this.emitter.emit("locallyPaused", this.id, false);
     }
 
@@ -439,23 +446,41 @@ export class Consumer extends Track {
     }
 
     public override set sinkIsPaused(pause: boolean) {
+        console.log("sinkIsPaused", this._sinkIsPaused, pause);
         if(this.sinkIsPaused === pause) { return; }
         this._sinkIsPaused = pause;
-        this.emitter.emit("sinkIsPaused", pause);
+        if(this.consumer) {
+            console.log("sinkIsPaused-emit", this.consumer?.paused, this._sinkIsPaused);
+            this.emitter.emit("sinkIsPaused", pause);
+        } else {
+            this.consumerPromise.then(() => {
+                console.log("sinkIsPaused-emit", this.consumer?.paused, this._sinkIsPaused);
+                this.emitter.emit("sinkIsPaused", pause);
+            });
+        }
     }
 
     public constructor (
-        private consumerPromise: Promise<MediaSoup.Consumer>,
+        consumer: Promise<MediaSoup.Consumer>,
         requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>,
     ) {
         super(requestBroadcastStateChange);
-        consumerPromise.then(c => {
-            this.consumer = c;
-            c.on("transportclose", () => console.log(`Consumer(${c.id})'s transport closed`));
-            c.on("trackended", () => console.log(`Consumer(${c.id}) ended`));
+        console.log("consumer constructor");
+        this.consumerPromise = consumer.then(async consumer => {
+            try {
+                console.log("consume constructor async", consumer);
+                this.consumer = consumer;
+                consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s transport closed`));
+                consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
+                this.start();
+                return consumer;
+            } catch(e) {
+                console.log(e);
+                throw e;
+            }
         });
     }
-
+    private consumerPromise: Promise<MediaSoup.Consumer>;
     private consumer?: MediaSoup.Consumer;
 }
 

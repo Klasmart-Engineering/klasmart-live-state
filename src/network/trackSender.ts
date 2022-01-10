@@ -1,14 +1,14 @@
-import { TrackLocation } from "../react/hooks/webrtc";
 import { Producer, SFU } from "./sfu";
 
 export class TrackSender {
 
     //TODO: Remove
     public get location() {
+        if(!this._producer) { return; }
         return {
             sfuId: this.getSfu().id,
-            producerId: this._producer?.id,
-        } as TrackLocation;
+            producerId: this._producer.id,
+        };
     }
     
     public get producer() { return this._producer; }
