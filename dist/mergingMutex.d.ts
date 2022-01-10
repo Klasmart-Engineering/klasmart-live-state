@@ -9,9 +9,7 @@
  * The new function also has a property `waitUntilUnlock`, an async function that waits for
  * the mutex to unlock without aquiring the mutex.
  */
-export declare function MergingMutex<T>(f: {
-    (): Promise<T>;
-}): (() => Promise<T>) & Readonly<{
+export declare function MergingMutex<T, Args extends unknown[]>(f: (...args: Args) => Promise<T>): ((...args: Args) => Promise<T>) & Readonly<{
     waitUntilUnlock: () => Promise<void>;
 }>;
 //# sourceMappingURL=mergingMutex.d.ts.map

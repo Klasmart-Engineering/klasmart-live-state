@@ -1,42 +1,51 @@
 import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
-import { Track, TrackLocation } from "../../network/sfu";
+import { ProducerId, SfuId, Track } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { StreamSender, WebRtcContext } from "../rtcContext";
 
-export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.camera, ctx);
-export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone, ctx);
-export const useScreenshare = (ctx = useContext(WebRtcContext)) => useStreamSender(ctx.screenshare, ctx);
+export type TrackLocation = { sfuId: SfuId, producerId: ProducerId }
+
+export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.camera);
+export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone);
+export const useScreenshare = (ctx = useContext(WebRtcContext)) => useStreamSender(ctx.screenshare);
 
 export const useStream = (
     audioLocation?: TrackLocation,
     videoLocation?: TrackLocation,
     ctx = useContext(WebRtcContext),
 ) => {
-    const audioTrack = useAsync(async (l?: TrackLocation) => l && ctx.getTrack(l), [audioLocation]);
-    const videoTrack = useAsync(async (l?: TrackLocation) => l && ctx.getTrack(l), [videoLocation]);
-    return useMediaStreamTracks([audioTrack.result, videoTrack.result]);
+    const audioTrack = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l))?.track, [audioLocation]);
+    const videoTrack = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l))?.track, [videoLocation]);
+    return useMediaStreamTracks(filterFalsy([audioTrack.result, videoTrack.result]));
 };
 
 export const useTrack = (
-    location: TrackLocation,
+    location?: TrackLocation,
     ctx = useContext(WebRtcContext),
-) => ({
-    track: useAsync((l: TrackLocation) => ctx.getTrack(l), [location]),
-    localPause: useAsyncCallback((paused: boolean) => ctx.pause(location, paused)),
-    globalPause: useAsyncCallback((paused: boolean) => ctx.pauseForEveryone(location, paused)),
-});
+) => {
+    const track = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l)), [location]);
+
+    return {
+        stream: useMediaStreamTracks(filterFalsy([track.result?.track])),
+        kind: track.result?.kind,
+        pause: useTrackPauseState(track.result),
+        start: useAsyncCallback(async () => (await track.currentPromise)?.start()),
+        stop: useAsyncCallback(async () => (await track.currentPromise)?.stop()),
+        globalPause: useAsyncCallback(async (paused: boolean) => (await track.currentPromise)?.requestBroadcastStateChange(paused)),
+    };
+};
 
 const useStreamSender = (
     streamSender: StreamSender,
 ) => ({
     start: useAsyncCallback(() => streamSender.start()),
     stop: useAsyncCallback(() => streamSender.stop()),
-    videoPaused: useProducerPauseState(streamSender.videoSender.track),
-    audioPaused: useProducerPauseState(streamSender.audioSender.track),
+    videoPaused: useTrackPauseState(streamSender.videoSender.producer),
+    audioPaused: useTrackPauseState(streamSender.audioSender.producer),
     stream: useMediaStreamTracks(filterFalsy([
-        streamSender.audioSender.track?.track,
-        streamSender.videoSender.track?.track,
+        streamSender.audioSender.producer?.track,
+        streamSender.videoSender.producer?.track,
     ])),
 });
 
@@ -44,9 +53,12 @@ const useTrackSender = (
     trackSender: TrackSender,
 ) => {
     return {
-        paused: useProducerPauseState(trackSender.track),
-        stream: useMediaStreamTracks(filterFalsy([trackSender.track?.track])),
-
+        paused: useTrackPauseState(trackSender.producer),
+        stream: useMediaStreamTracks(filterFalsy([trackSender.producer?.track])),
+        start: useAsyncCallback(() => trackSender.start()),
+        stop: useAsyncCallback(() => trackSender.producer?.stop()),
+        location: trackSender.location,
+        globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
     };
 };
 
@@ -68,24 +80,12 @@ const useTrackPauseState = (
             track.off("sinkIsPaused", rerender);
         };
     });
-
-
-    const start = useAsyncCallback(() => track?.start());
-    // const globalPause = useAsyncCallback(() => track?.requestBroadcastStateChange(true));
-    // const globalResume = useAsyncCallback(() => track?.requestBroadcastStateChange(false));
-    const stop = useAsyncCallback(() => track?.stop());
-
     
-    if(!track) { return; }
-    const {
-        sourceIsPaused,
-        broadcastIsPaused,
-        sinkIsPaused,   
-    } = track;
     return {
-        sourceIsPaused,
-        broadcastIsPaused,
-        sinkIsPaused,
+        locally: track?.locallyPaused,
+        atSource: track?.sourceIsPaused,
+        atBroadcast: track?.broadcastIsPaused,
+        atSink: track?.sinkIsPaused,
     };
 };
 

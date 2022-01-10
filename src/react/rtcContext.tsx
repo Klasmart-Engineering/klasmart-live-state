@@ -25,6 +25,10 @@ export class WebRtcManager {
         screenCaptureGetter(() => this.screenCaptureConstraints),
     );
 
+    public async getTrack({sfuId, producerId}: TrackLocation) {
+        return await this.sfu(sfuId).getTrack(producerId);
+    }
+
     public async pauseForEveryone({sfuId, producerId}: TrackLocation, paused: boolean) {
         const sfu = this.sfus.get(sfuId);
         if(!sfu) {throw new Error(`Not connected to SFU(${sfuId})`); }
@@ -66,8 +70,8 @@ export class StreamSender {
 
     public async stop() {
         await Promise.allSettled([
-            this.videoSender.stop(), 
-            this.audioSender.stop(),
+            this.videoSender.producer?.stop(), 
+            this.audioSender.producer?.stop(),
         ]);
     }
 

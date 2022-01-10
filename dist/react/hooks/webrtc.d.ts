@@ -1,51 +1,97 @@
-import { TrackLocation } from "../../network/sfu";
+import { ProducerId, SfuId } from "../../network/sfu";
+export declare type TrackLocation = {
+    sfuId: SfuId;
+    producerId: ProducerId;
+};
 export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) => {
-    isSending: any;
     paused: {
-        sourcePaused: any;
-        broadcastPaused: any;
-        sinkPaused: any;
+        locally: boolean | undefined;
+        atSource: boolean | undefined;
+        atBroadcast: boolean | undefined;
+        atSink: boolean | undefined;
     };
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
-    stop: import("react-async-hook").UseAsyncReturn<void, []>;
+    stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
+    location: TrackLocation;
+    globalPause: import("react-async-hook").UseAsyncReturn<void | {
+        routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
+        producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
+        producerCreated?: ProducerId | undefined;
+        consumerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
+        consumerCreated?: {
+            id: import("../../network/sfu").ConsumerId;
+            producerId: ProducerId;
+            kind: import("mediasoup-client/lib/RtpParameters").MediaKind;
+            rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
+        } | undefined;
+    } | undefined, [paused: boolean]>;
 };
 export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager) => {
-    isSending: any;
     paused: {
-        sourcePaused: any;
-        broadcastPaused: any;
-        sinkPaused: any;
+        locally: boolean | undefined;
+        atSource: boolean | undefined;
+        atBroadcast: boolean | undefined;
+        atSink: boolean | undefined;
     };
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
-    stop: import("react-async-hook").UseAsyncReturn<void, []>;
+    stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
+    location: TrackLocation;
+    globalPause: import("react-async-hook").UseAsyncReturn<void | {
+        routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
+        producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
+        producerCreated?: ProducerId | undefined;
+        consumerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
+        consumerCreated?: {
+            id: import("../../network/sfu").ConsumerId;
+            producerId: ProducerId;
+            kind: import("mediasoup-client/lib/RtpParameters").MediaKind;
+            rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
+        } | undefined;
+    } | undefined, [paused: boolean]>;
 };
 export declare const useScreenshare: (ctx?: import("../rtcContext").WebRtcManager) => {
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void, []>;
     videoPaused: {
-        sourcePaused: any;
-        broadcastPaused: any;
-        sinkPaused: any;
+        locally: boolean | undefined;
+        atSource: boolean | undefined;
+        atBroadcast: boolean | undefined;
+        atSink: boolean | undefined;
     };
     audioPaused: {
-        sourcePaused: any;
-        broadcastPaused: any;
-        sinkPaused: any;
+        locally: boolean | undefined;
+        atSource: boolean | undefined;
+        atBroadcast: boolean | undefined;
+        atSink: boolean | undefined;
     };
     stream: MediaStream | undefined;
 };
 export declare const useStream: (audioLocation?: TrackLocation | undefined, videoLocation?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => MediaStream | undefined;
-export declare const useTrack: (location: TrackLocation, ctx?: import("../rtcContext").WebRtcManager) => {
-    track: import("react-async-hook").UseAsyncReturn<unknown, [l: TrackLocation]>;
-    paused: {
-        sourcePaused: any;
-        broadcastPaused: any;
-        sinkPaused: any;
+export declare const useTrack: (location?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => {
+    stream: MediaStream | undefined;
+    kind: "video" | "audio" | undefined;
+    pause: {
+        locally: boolean | undefined;
+        atSource: boolean | undefined;
+        atBroadcast: boolean | undefined;
+        atSink: boolean | undefined;
     };
-    localPause: import("react-async-hook").UseAsyncReturn<void, [paused: boolean]>;
-    globalPause: import("react-async-hook").UseAsyncReturn<void, [paused: boolean]>;
+    start: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
+    stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
+    globalPause: import("react-async-hook").UseAsyncReturn<void | {
+        routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
+        producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
+        producerCreated?: ProducerId | undefined;
+        consumerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
+        consumerCreated?: {
+            id: import("../../network/sfu").ConsumerId;
+            producerId: ProducerId;
+            kind: import("mediasoup-client/lib/RtpParameters").MediaKind;
+            rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
+        } | undefined;
+    } | undefined, [paused: boolean]>;
 };
-export declare const useMediaStreamTracks: (tracks: Array<MediaStreamTrack | undefined | null>) => MediaStream | undefined;
+export declare const useMediaStreamTracks: (tracks: Array<MediaStreamTrack>) => MediaStream | undefined;
 //# sourceMappingURL=webrtc.d.ts.map

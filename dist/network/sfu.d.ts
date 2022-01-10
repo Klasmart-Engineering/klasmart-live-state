@@ -83,20 +83,19 @@ export declare type PauseEvent = {
     producerId: ProducerId;
     paused: boolean;
 };
-export declare type TrackLocation = {
-    sfuId: SfuId;
-    producerId: ProducerId;
-};
 export declare class SFU {
     readonly id: SfuId;
     private readonly store;
     readonly url: string;
+    getTrack(producerId: ProducerId): Promise<Producer | Consumer>;
+    produceTrack(getTrack: () => Promise<MediaStreamTrack>, name: string): Promise<Producer>;
+    consumeTrack(producerId: ProducerId): Promise<Consumer>;
     private readonly device;
     private readonly promiseCompleter;
     private readonly ws;
     constructor(id: SfuId, store: Store<unknown, Action>, url: string);
-    private readonly states;
-    createProducer(track: MediaStreamTrack, name: string): Promise<ProducerStateWriteable>;
+    private readonly tracks;
+    private createProducer;
     private createConsumer;
     changeBroadcastState(id: ProducerId, paused: boolean): Promise<void | Result>;
     setPauseState(id: ProducerId, paused: boolean): Promise<void | Result>;
@@ -117,58 +116,61 @@ export declare class SFU {
     private onBroadcastPaused;
     private onSinkPaused;
 }
-export declare class ProducerState {
-    sfu: SFU;
-    protected _producer: MediaSoup.Producer;
-    get producer(): MediaSoup.Producer;
-    get id(): ProducerId;
-    get sourceIsPaused(): boolean;
-    get broadcastIsPaused(): boolean | undefined;
-    constructor(sfu: SFU, _producer: MediaSoup.Producer);
-    readonly on: EventEmitter<ProducerStateEventMap>["on"];
-    readonly off: EventEmitter<ProducerStateEventMap>["off"];
-    protected getState(): this;
-    protected readonly emitter: EventEmitter<ProducerStateEventMap, any>;
-    protected _broadcastIsPaused?: boolean;
-}
-declare class ProducerStateWriteable extends ProducerState {
-    getObserver(): this;
-    close(): void;
-    set broadcastIsPaused(pause: boolean);
-}
-export declare type ProducerStateEventMap = {
-    close: () => void;
-    sourceIsPaused: (paused?: boolean) => void;
-    broadcastIsPaused: (paused?: boolean) => void;
-};
-export declare class ConsumerState {
-    get consumer(): MediaSoup.Consumer | undefined;
-    get id(): ProducerId | undefined;
+export declare abstract class Track {
+    readonly requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>;
+    abstract get id(): ProducerId;
+    abstract get kind(): "audio" | "video" | undefined;
+    abstract get track(): MediaStreamTrack | null | undefined;
+    abstract get locallyPaused(): boolean;
+    abstract start(): Promise<void>;
+    abstract stop(): Promise<void>;
+    abstract close(): void;
     get sourceIsPaused(): boolean | undefined;
     get broadcastIsPaused(): boolean | undefined;
     get sinkIsPaused(): boolean | undefined;
-    readonly on: EventEmitter<ConsumerStateEventMap>["on"];
-    readonly off: EventEmitter<ConsumerStateEventMap>["off"];
-    protected getState(): this;
-    protected readonly emitter: EventEmitter<ConsumerStateEventMap, any>;
-    protected _consumer?: MediaSoup.Consumer;
+    readonly on: EventEmitter<TrackEventMap>["on"];
+    readonly off: EventEmitter<TrackEventMap>["off"];
+    protected readonly emitter: EventEmitter<TrackEventMap, any>;
     protected _sourceIsPaused?: boolean;
     protected _broadcastIsPaused?: boolean;
     protected _sinkIsPaused?: boolean;
+    constructor(requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
 }
-export declare class ConsumerStateWriteable extends ConsumerState {
-    getObserver(): this;
+export declare class Producer extends Track {
+    private readonly producer;
+    private readonly getTrack;
+    get id(): ProducerId;
+    get kind(): "audio" | "video";
+    get track(): MediaStreamTrack | null;
+    get locallyPaused(): boolean;
+    start(): Promise<void>;
+    stop(): Promise<void>;
     close(): void;
-    set consumer(consumer: MediaSoup.Consumer);
+    get sourceIsPaused(): boolean;
+    set broadcastIsPaused(pause: boolean);
+    constructor(producer: MediaSoup.Producer, getTrack: () => Promise<MediaStreamTrack>, requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
+}
+export declare class Consumer extends Track {
+    private consumerPromise;
+    get id(): ProducerId;
+    get kind(): "audio" | "video" | undefined;
+    get track(): MediaStreamTrack | undefined;
+    get locallyPaused(): true;
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    close(): void;
     set sourceIsPaused(paused: boolean);
     set broadcastIsPaused(pause: boolean);
     set sinkIsPaused(pause: boolean);
+    constructor(consumerPromise: Promise<MediaSoup.Consumer>, requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
+    private consumer?;
 }
-export declare type ConsumerStateEventMap = {
+export declare type TrackEventMap = {
     close: () => void;
-    sourceIsPaused: (paused?: boolean) => void;
-    broadcastIsPaused: (paused?: boolean) => void;
-    sinkIsPaused: (paused?: boolean) => void;
+    locallyPaused: (id: ProducerId, paused: boolean) => void;
+    sourceIsPaused: (paused: boolean) => void;
+    broadcastIsPaused: (paused: boolean) => void;
+    sinkIsPaused: (paused: boolean) => void;
 };
 export {};
 //# sourceMappingURL=sfu.d.ts.map

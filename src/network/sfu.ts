@@ -97,8 +97,31 @@ export type PauseEvent = {
     paused: boolean
 }
 
-export type TrackLocation = { sfuId: SfuId, producerId: ProducerId }
 export class SFU {
+    public async getTrack(producerId: ProducerId) {
+        const track = this.tracks.get(producerId);
+        if(track) { return track; }    
+        return await this.consumeTrack(producerId); 
+    }
+
+    public async produceTrack(
+        getTrack: () => Promise<MediaStreamTrack>,
+        name: string
+    ) {
+        const producer = await this.createProducer(getTrack, name);
+        this.tracks.set(producer.id, producer);
+        await this.setPauseState(producer.id, false);
+        return producer;
+    }
+
+    public async consumeTrack(producerId: ProducerId) {
+        if(this.tracks.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
+        const consumer = await this.createConsumer(producerId);
+        this.tracks.set(producerId, consumer);
+        await this.setPauseState(producerId, false);
+        return consumer;
+    }
+
     private readonly device = new Device();
 
     private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>();
@@ -121,14 +144,19 @@ export class SFU {
     }
     
     private readonly tracks = new Map<ProducerId, Producer|Consumer>();
-    public async produceTrack(getTrack: () => Promise<MediaStreamTrack>, name: string) {
+
+
+    private async createProducer(
+        getTrack: () => Promise<MediaStreamTrack>,
+        name: string
+    ) {
         const producerTransport = await this.producerTransport();
         
         const track = await getTrack();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
-        
-        const producer = new Producer(
+
+        const producer: Producer = new Producer(
             await producerTransport.produce({
                 track,
                 zeroRtpOnPause: true,
@@ -136,36 +164,25 @@ export class SFU {
                 appData: name,
             }),
             getTrack,
-            (id: ProducerId, paused: boolean) => this.changeBroadcastState(id,paused)
+            (paused: boolean) => this.changeBroadcastState(producer.id,paused),
         );
-        this.tracks.set(producer.id, producer);
         producer.on("locallyPaused", (id, p) => this.setPauseState(id, p));
-
-        await this.setPauseState(producer.id, false);
-
         return producer;
     }
 
-    private async consumeTrack(producerId: ProducerId) {
-        {
-            const state = this.tracks.get(producerId);
-            if(state) { return state; }            
-        }
-        const state = new Consumer(
-            (id: ProducerId, paused: boolean) => this.changeBroadcastState(id,paused)
-        );
-        this.tracks.set(producerId, state);
-        state.on("locallyPaused", (id, p) => this.setPauseState(id, p));
-
+    private async createConsumer(producerId: ProducerId) {
         const consumerTransport = await this.consumerTransport();
         await this.sendRtpCapabilities();
         const response = await this.request({ consumeTrack: { producerId } });
         if (!response) { throw new Error(`Received empty response from SFU when trying to consume producerId(${producerId})`); }
         if (!response.consumerCreated) { throw new Error(`Received response without consumer parameters from SFU when trying to consume producerId(${producerId})`); }
         
-        state.consumer = await consumerTransport.consume(response.consumerCreated);
-        await this.setPauseState(producerId, false);
-        return state;
+        const consumer: Consumer = new Consumer(
+            consumerTransport.consume(response.consumerCreated),
+            (paused: boolean) => this.changeBroadcastState(consumer.id,paused),
+        );
+        consumer.on("locallyPaused", (id, p) => this.setPauseState(id, p));
+        return consumer;
     }
 
     public async changeBroadcastState(id: ProducerId, paused: boolean) {
@@ -296,8 +313,8 @@ export class SFU {
     }
 
     private onSourcePaused({ producerId, paused }: PauseEvent) { 
-        const state = this.tracks.get(producerId);
-        if(state instanceof Consumer) { state.sourceIsPaused = paused; }
+        const track = this.tracks.get(producerId);
+        if(track instanceof Consumer) { track.sourceIsPaused = paused; }
     }
     private onBroadcastPaused({ producerId, paused }: PauseEvent) {
         const state = this.tracks.get(producerId);
@@ -311,7 +328,10 @@ export class SFU {
 
 export abstract class Track {
     public abstract get id(): ProducerId;
+    public abstract get kind(): "audio" | "video" | undefined;
     public abstract get track(): MediaStreamTrack | null | undefined;
+    public abstract get locallyPaused(): boolean
+
     public abstract start(): Promise<void>;
     public abstract stop(): Promise<void>;
     public abstract close(): void;
@@ -329,14 +349,15 @@ export abstract class Track {
     protected _sinkIsPaused?: boolean;
 
     public constructor(
-        public readonly requestBroadcastStateChange: (id: ProducerId, paused: boolean) => Promise<void|Result>
+        public readonly requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>
     ) {}
 }
 
 export class Producer extends Track {
     public get id() { return newProducerID(this.producer.id); }
-
+    public get kind() { return this.producer.kind as "audio"|"video"; }
     public get track() { return this.producer.track; }
+    public get locallyPaused() { return this.producer.paused; }
 
     public async start() {
         if(this.track?.readyState !== "live") {
@@ -352,7 +373,7 @@ export class Producer extends Track {
     public async stop() {
         if(!this.producer.paused) {
             await this.producer.replaceTrack({track: null});
-            await this.producer.pause();
+            await this.producer.pause(); //Modifies p1c
             this.emitter.emit("locallyPaused", this.id, true);
         }
     }
@@ -370,7 +391,7 @@ export class Producer extends Track {
     public constructor(
         private readonly producer: MediaSoup.Producer,
         private readonly getTrack: () => Promise<MediaStreamTrack>,
-        requestBroadcastStateChange: (id: ProducerId, paused: boolean) => Promise<void|Result>
+        requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>
     ) {
         super(requestBroadcastStateChange);
         producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport closed`));
@@ -380,32 +401,30 @@ export class Producer extends Track {
 
 export class Consumer extends Track {
     public get id() {
-        if(!this._consumer) {throw new Error("Consumer has not yet initialized."); }
-        return newProducerID(this._consumer.producerId);
+        if(!this.consumer) {throw new Error("Consumer has not yet initialized."); }
+        return newProducerID(this.consumer.producerId);
     }
-
-    public get track() { return this._consumer?.track; }
+    public get kind() { return this.consumer?.kind as "audio"|"video"|undefined; }
+    public get track() { return this.consumer?.track; }
+    public get locallyPaused() { return this.consumer?.paused || true; }
     
     public async start() {
-        if(!this._consumer || !this._consumer.paused) { return; }
-        await this._consumer.resume();
+        const consumer = await this.consumerPromise;
+
+        if(!consumer.paused) { return; }
+        await consumer.resume();
         this.emitter.emit("locallyPaused", this.id, false);
     }
 
     public async stop() {
-        if(!this._consumer || this._consumer.paused) { return; }
-        await this._consumer.pause();
+        const consumer = await this.consumerPromise;
+        
+        if(consumer.paused) { return; }
+        await consumer.pause();
         this.emitter.emit("locallyPaused", this.id, true);
     }
 
-    public close() { this.consumer.close(); }
-
-    public set consumer(consumer: MediaSoup.Consumer) {
-        if(this.consumer) { throw new Error(`ConsumerState.Consumer(${this.id}) is already set`); }
-        this._consumer = consumer;
-        consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s transport closed`));
-        consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
-    }
+    public close() { this.consumer?.close(); }
 
     public override set sourceIsPaused(paused: boolean) {
         if(this.sourceIsPaused === paused) { return; }
@@ -425,7 +444,19 @@ export class Consumer extends Track {
         this.emitter.emit("sinkIsPaused", pause);
     }
 
-    private _consumer?: MediaSoup.Consumer;
+    public constructor (
+        private consumerPromise: Promise<MediaSoup.Consumer>,
+        requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>,
+    ) {
+        super(requestBroadcastStateChange);
+        consumerPromise.then(c => {
+            this.consumer = c;
+            c.on("transportclose", () => console.log(`Consumer(${c.id})'s transport closed`));
+            c.on("trackended", () => console.log(`Consumer(${c.id}) ended`));
+        });
+    }
+
+    private consumer?: MediaSoup.Consumer;
 }
 
 export type TrackEventMap = {

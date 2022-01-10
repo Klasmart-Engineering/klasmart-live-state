@@ -13,6 +13,7 @@ export declare class WebRtcManager {
     readonly camera: TrackSender;
     screenCaptureConstraints?: DisplayMediaStreamConstraints;
     readonly screenshare: StreamSender;
+    getTrack({ sfuId, producerId }: TrackLocation): Promise<import("../network/sfu").Producer | import("../network/sfu").Consumer>;
     pauseForEveryone({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     pause({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     constructor(store: Store<unknown, Action>, selector: (s: unknown) => State, getUrl: (id: SfuId) => URL);
