@@ -1,12 +1,8 @@
-import { Store } from "@reduxjs/toolkit";
 import React from "react";
 import { TrackSender } from "../network/trackSender";
 import { SFU, SfuId } from "../network/sfu";
-import { Action, State } from "../redux/reducer";
 import { TrackLocation } from "./hooks/webrtc";
 export declare class WebRtcManager {
-    readonly store: Store<unknown, Action>;
-    readonly selector: (s: unknown) => State;
     readonly getUrl: (id: SfuId) => URL;
     microphoneConstraints?: MediaStreamConstraints["audio"];
     readonly microphone: TrackSender;
@@ -17,7 +13,7 @@ export declare class WebRtcManager {
     getTrack({ sfuId, producerId }: TrackLocation): Promise<import("../network/sfu").Producer | import("../network/sfu").Consumer>;
     pauseForEveryone({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     pause({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
-    constructor(store: Store<unknown, Action>, selector: (s: unknown) => State, getUrl: (id: SfuId) => URL);
+    constructor(getUrl: (id: SfuId) => URL);
     private readonly sfus;
     private sfu;
 }

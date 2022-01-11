@@ -1,7 +1,5 @@
 import { types as MediaSoup } from "mediasoup-client";
 import { NewType } from "../types";
-import { Store } from "@reduxjs/toolkit";
-import { Action } from "../redux/reducer";
 import EventEmitter from "eventemitter3";
 export declare type SfuId = NewType<string, "sfuId">;
 export declare const newSfuID: (id: string) => SfuId;
@@ -85,7 +83,6 @@ export declare type PauseEvent = {
 };
 export declare class SFU {
     readonly id: SfuId;
-    private readonly store;
     readonly url: string;
     getTrack(producerId: ProducerId): Promise<Producer | Consumer>;
     produceTrack(getTrack: () => Promise<MediaStreamTrack>, name: string): Promise<Producer>;
@@ -93,7 +90,7 @@ export declare class SFU {
     private readonly device;
     private readonly promiseCompleter;
     private readonly ws;
-    constructor(id: SfuId, store: Store<unknown, Action>, url: string);
+    constructor(id: SfuId, url: string);
     private readonly producers;
     private readonly consumers;
     private createProducer;

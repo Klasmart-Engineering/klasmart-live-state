@@ -1,8 +1,6 @@
-import { Store } from "@reduxjs/toolkit";
 import React from "react";
 import { TrackSender } from "../network/trackSender";
 import { SFU, SfuId, newSfuID } from "../network/sfu";
-import { Action, State } from "../redux/reducer";
 import { TrackLocation } from "./hooks/webrtc";
 
 export class WebRtcManager {
@@ -43,8 +41,6 @@ export class WebRtcManager {
     }
 
     public constructor(
-        public readonly store: Store<unknown, Action>,
-        public readonly selector: (s: unknown) => State,
         public readonly getUrl: (id: SfuId) => URL,
     ) {}
 
@@ -54,7 +50,7 @@ export class WebRtcManager {
         let sfu = this.sfus.get(id);
         if (!sfu) {
             const url = this.getUrl(id).toString();
-            sfu = new SFU(id, this.store, url);
+            sfu = new SFU(id, url);
             this.sfus.set(id, sfu);
         }
         return sfu;

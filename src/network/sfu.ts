@@ -2,12 +2,8 @@ import { types as MediaSoup, Device } from "mediasoup-client";
 import { NewType } from "../types";
 import { TransportState, WSTransport } from "../network/websocketTransport";
 import { PromiseCompleter } from "../network/promiseCompleter";
-import { Store } from "@reduxjs/toolkit";
-import { Action } from "../redux/reducer";
-import { webrtcActions } from "../redux/webrtc";
 import { ExecuteOnce } from "../executeOnce";
 import EventEmitter from "eventemitter3";
-import { MergingMutex } from "../mergingMutex";
 
 export type SfuId = NewType<string, "sfuId">
 export const newSfuID = (id: string) => id as SfuId;
@@ -139,7 +135,6 @@ export class SFU {
 
     public constructor(
         public readonly id: SfuId,
-        private readonly store: Store<unknown, Action>,
         public readonly url: string,
     ) {
         this.ws = new WSTransport(
@@ -205,13 +200,9 @@ export class SFU {
         if (!response) { throw new Error("Empty response from SFU"); }
         const { consumerTransportCreated } = response;
         if (!consumerTransportCreated) { throw new Error("Response from SFU does not contain consumer transport"); }
-        
+
         const transport = this.device.createRecvTransport(consumerTransportCreated);
         transport.on("connect", ({ dtlsParameters }, success, error) => this.request({ connectConsumerTransport: { dtlsParameters } }).then(success, error));
-        transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
-            const action = webrtcActions.setConsumerConnectionStatus({ id: this.id, connectionState });
-            this.store.dispatch(action);
-        });
         return transport;
     }
 
@@ -237,11 +228,6 @@ export class SFU {
             } catch(e) {
                 error(e);
             }
-        });
-        transport.on("connectionstatechange", (connectionState: MediaSoup.ConnectionState) => {
-            console.log("connectionstatechange", connectionState);
-            const action = webrtcActions.setProducerConnectionStatus({ id: this.id, connectionState });
-            this.store.dispatch(action);
         });
         return transport;
     }
