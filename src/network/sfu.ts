@@ -99,8 +99,12 @@ export type PauseEvent = {
 
 export class SFU {
     public async getTrack(producerId: ProducerId) {
-        const track = this.tracks.get(producerId);
-        if(track) { return track; }    
+        const producer = this.producers.get(producerId);
+        if(producer) { return producer; }
+
+        const consumer = this.consumers.get(producerId);
+        if(consumer) { return consumer; }
+
         return await this.consumeTrack(producerId); 
     }
 
@@ -113,20 +117,18 @@ export class SFU {
             getTrack,
             (paused: boolean) => this.changeBroadcastState(producer.id,paused),
         );
-        producer.on("locallyPaused", (id, p) => this.setPauseState(id, p));
-        this.tracks.set(producer.id, producer);
+        producer.on("locallyPaused", (p) => this.setPauseState(producer.id, p));
+        this.producers.set(producer.id, producer);
         await this.setPauseState(producer.id, false);
         return producer;
     }
 
     public async consumeTrack(producerId: ProducerId) {
-        if(this.tracks.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
-        const consumer: Consumer = new Consumer(
-            this.createConsumer(producerId),
-            (paused: boolean) => this.changeBroadcastState(consumer.id,paused),
-        );
-        consumer.on("locallyPaused", (id, p) => this.setPauseState(id, p));
-        this.tracks.set(producerId, consumer);
+        if(this.producers.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
+        const consumerPromise = this.createConsumer(producerId);
+        this.consumers.set(producerId, consumerPromise);
+        const consumer = await consumerPromise;
+        consumer.on("locallyPaused", (p) => this.setPauseState(consumer.id, p));
         return consumer;
     }
 
@@ -151,8 +153,8 @@ export class SFU {
         this.ws.connect().catch(e => console.error(e));
     }
     
-    private readonly tracks = new Map<ProducerId, Producer|Consumer>();
-
+    private readonly producers = new Map<ProducerId, Producer>();
+    private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
 
     private async createProducer(
         getTrack: () => Promise<MediaStreamTrack>,
@@ -163,10 +165,11 @@ export class SFU {
         const track = await getTrack();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
+        
         return await producerTransport.produce({
             track,
             zeroRtpOnPause: true,
-            disableTrackOnPause: true,
+            disableTrackOnPause: false,
             appData: {name},
         });
     }
@@ -180,7 +183,10 @@ export class SFU {
         console.log(response);
         const consumer = await consumerTransport.consume(response.consumerCreated);
         await this.setPauseState(producerId, false);
-        return consumer;
+        return new Consumer(
+            consumer,
+            (paused: boolean) => this.changeBroadcastState(producerId, paused),
+        );
     }
 
     public async changeBroadcastState(id: ProducerId, paused: boolean) {
@@ -307,23 +313,28 @@ export class SFU {
         }
     }
 
-    private closeTrack(producerId: ProducerId) {
-        this.tracks.get(producerId)?.close();
-        this.tracks.delete(producerId);
+    private async closeTrack(producerId: ProducerId) {
+        this.producers.get(producerId)?.close();
+        this.producers.delete(producerId);
+        
+        (await this.consumers.get(producerId))?.close();
+        this.consumers.delete(producerId);
     }
 
-    private onSourcePaused({ producerId, paused }: PauseEvent) { 
-        const track = this.tracks.get(producerId);
-        if(track instanceof Consumer) { track.sourceIsPaused = paused; }
+    private async onSourcePaused({ producerId, paused }: PauseEvent) { 
+        const consumer = await this.consumers.get(producerId);
+        if(consumer) { consumer.sourceIsPaused = paused; }
     }
-    private onBroadcastPaused({ producerId, paused }: PauseEvent) {
-        const track = this.tracks.get(producerId);
-        if(track) { track.broadcastIsPaused = paused; }
+    private async onBroadcastPaused({ producerId, paused }: PauseEvent) {
+        const producer = this.producers.get(producerId);
+        if(producer) { producer.broadcastIsPaused = paused; }
+
+        const consumer = await this.consumers.get(producerId);
+        if(consumer) { consumer.broadcastIsPaused = paused; }
     }
-    private onSinkPaused({ producerId, paused }: PauseEvent) {
-        const track = this.tracks.get(producerId);
-        console.log("onSinkPaused", track, producerId, paused);
-        if(track instanceof Consumer) { track.sinkIsPaused = paused; }
+    private async onSinkPaused({ producerId, paused }: PauseEvent) {
+        const consumer = await this.consumers.get(producerId);
+        if(consumer) { consumer.sinkIsPaused = paused; }
     }
 }
 
@@ -331,12 +342,12 @@ export abstract class Track {
     public abstract get id(): ProducerId;
     public abstract get kind(): "audio" | "video" | undefined;
     public abstract get track(): MediaStreamTrack | null | undefined;
-    public abstract get locallyPaused(): boolean
 
     public abstract start(): Promise<void>;
     public abstract stop(): Promise<void>;
     public abstract close(): void;
 
+    public get locallyPaused() { return this._locallyPaused; }
     public get sourceIsPaused() { return this._sourceIsPaused; }
     public get broadcastIsPaused() { return this._broadcastIsPaused; }
     public get sinkIsPaused() { return this._sinkIsPaused; }
@@ -345,6 +356,9 @@ export abstract class Track {
     public readonly off: EventEmitter<TrackEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
 
     protected readonly emitter = new EventEmitter<TrackEventMap>();
+    
+    protected _locallyPaused?: boolean;
+
     protected _sourceIsPaused?: boolean;
     protected _broadcastIsPaused?: boolean;
     protected _sinkIsPaused?: boolean;
@@ -360,35 +374,29 @@ export class Producer extends Track {
     public get id() { return newProducerID(this.producer.id); }
     public get kind() { return this.producer.kind as "audio"|"video"; }
     public get track() { return this.producer.track; }
-    public get locallyPaused() { return this.producer.paused; }
 
     public async start() {
         if(this.track?.readyState !== "live") {
             const track = await this.getTrack();
             await this.producer.replaceTrack({track});
         }
-        if(this.producer.paused) {
-            await this.producer.resume();
-            this.emitter.emit("locallyPaused", this.id, false);
-        }
+        await this.setLocallyPaused(false);
     }
 
     public async stop() {
-        if(!this.producer.paused) {
+        if(this.producer.track) {
             await this.producer.replaceTrack({track: null});
-            await this.producer.pause(); //Modifies p1c
-            this.emitter.emit("locallyPaused", this.id, true);
         }
+        await this.setLocallyPaused(true);
     }
 
     public close() { this.producer.close(); }
-
-    public override get sourceIsPaused() { return this.producer.paused; }
     
     public override set broadcastIsPaused(pause: boolean) {
-        if(this.broadcastIsPaused === pause) { return; }
-        this.broadcastIsPaused = pause;
+        if(this._broadcastIsPaused === pause) { return; }
+        this._broadcastIsPaused = pause;
         this.emitter.emit("broadcastIsPaused", pause);
+        this.updatePauseState();
     }
 
     public constructor(
@@ -401,6 +409,23 @@ export class Producer extends Track {
         producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport closed`));
         producer.on("trackended", () => console.log(`Producer(${producer.id}) ended`));
     }
+
+    private async setLocallyPaused(pause: boolean) {
+        if(this._locallyPaused === pause) { return; }
+        this._locallyPaused = pause;
+        await this.updatePauseState();
+        this.emitter.emit("locallyPaused", pause);
+    }
+
+    private async updatePauseState() {
+        const shouldBePaused = this._locallyPaused || this._broadcastIsPaused;
+        if(this.producer.paused === shouldBePaused) { return; }
+        if(shouldBePaused) {
+            await this.producer.pause();
+        } else  {
+            await this.producer.resume();
+        }
+    }
 }
 
 export class Consumer extends Track {
@@ -410,84 +435,70 @@ export class Consumer extends Track {
     }
     public get kind() { return this.consumer?.kind as "audio"|"video"|undefined; }
     public get track() { return this.consumer?.track; }
-    public get locallyPaused() { return this.consumer?.paused || true; }
     
     public async start() {
-        console.log("consumer start - await");
-        const consumer = await this.consumerPromise;
-        console.log("consumer start - for reals this time", consumer);
-
-        if(!consumer.paused) { return; }
-        await consumer.resume();
-        console.log("consumer start - resume", consumer);
-        this.emitter.emit("locallyPaused", this.id, false);
+        await this.setLocallyPaused(false);
     }
 
     public async stop() {
-        const consumer = await this.consumerPromise;
-        
-        if(consumer.paused) { return; }
-        await consumer.pause();
-        this.emitter.emit("locallyPaused", this.id, true);
+        await this.setLocallyPaused(true);
     }
 
     public close() { this.consumer?.close(); }
 
     public override set sourceIsPaused(paused: boolean) {
-        if(this.sourceIsPaused === paused) { return; }
+        if(this._sourceIsPaused === paused) { return; }
         this._sourceIsPaused = paused;
+        this.updatePauseState();
         this.emitter.emit("sourceIsPaused", paused);
     }
 
     public override set broadcastIsPaused(pause: boolean) {
-        if(this.broadcastIsPaused === pause) { return; }
+        if(this._broadcastIsPaused === pause) { return; }
         this._broadcastIsPaused = pause;
+        this.updatePauseState();
         this.emitter.emit("broadcastIsPaused", pause);
     }
 
     public override set sinkIsPaused(pause: boolean) {
-        console.log("sinkIsPaused", this._sinkIsPaused, pause);
-        if(this.sinkIsPaused === pause) { return; }
+        if(this._sinkIsPaused === pause) { return; }
         this._sinkIsPaused = pause;
-        if(this.consumer) {
-            console.log("sinkIsPaused-emit", this.consumer?.paused, this._sinkIsPaused);
-            this.emitter.emit("sinkIsPaused", pause);
-        } else {
-            this.consumerPromise.then(() => {
-                console.log("sinkIsPaused-emit", this.consumer?.paused, this._sinkIsPaused);
-                this.emitter.emit("sinkIsPaused", pause);
-            });
-        }
+        this.emitter.emit("sinkIsPaused", pause);
     }
 
     public constructor (
-        consumer: Promise<MediaSoup.Consumer>,
+        private consumer: MediaSoup.Consumer,
         requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>,
     ) {
         super(requestBroadcastStateChange);
         console.log("consumer constructor");
-        this.consumerPromise = consumer.then(async consumer => {
-            try {
-                console.log("consume constructor async", consumer);
-                this.consumer = consumer;
-                consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s transport closed`));
-                consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
-                this.start();
-                return consumer;
-            } catch(e) {
-                console.log(e);
-                throw e;
-            }
-        });
+        consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s transport closed`));
+        consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
     }
-    private consumerPromise: Promise<MediaSoup.Consumer>;
-    private consumer?: MediaSoup.Consumer;
+
+    private async setLocallyPaused(paused: boolean) {
+        if(this._locallyPaused === paused) { return; }
+        this._locallyPaused = paused;
+        await this.updatePauseState();
+        this.emitter.emit("locallyPaused", paused);
+    }
+
+    private async updatePauseState() {
+        const shouldBePaused = this._locallyPaused || this._broadcastIsPaused || this._sourceIsPaused;
+        this.consumer.track.enabled = !shouldBePaused;
+        if(this.consumer.paused === shouldBePaused) { return; }
+        if(shouldBePaused) {
+            await this.consumer.pause();
+        } else  {
+            await this.consumer.resume();
+        }
+    }
 }
 
 export type TrackEventMap = {
     close: () => void,
 
-    locallyPaused: (id: ProducerId, paused: boolean) => void,
+    locallyPaused: (paused: boolean) => void,
     
     sourceIsPaused: (paused: boolean) => void,
     broadcastIsPaused: (paused: boolean) => void,

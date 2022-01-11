@@ -94,7 +94,8 @@ export declare class SFU {
     private readonly promiseCompleter;
     private readonly ws;
     constructor(id: SfuId, store: Store<unknown, Action>, url: string);
-    private readonly tracks;
+    private readonly producers;
+    private readonly consumers;
     private createProducer;
     private createConsumer;
     changeBroadcastState(id: ProducerId, paused: boolean): Promise<void | Result>;
@@ -121,16 +122,17 @@ export declare abstract class Track {
     abstract get id(): ProducerId;
     abstract get kind(): "audio" | "video" | undefined;
     abstract get track(): MediaStreamTrack | null | undefined;
-    abstract get locallyPaused(): boolean;
     abstract start(): Promise<void>;
     abstract stop(): Promise<void>;
     abstract close(): void;
+    get locallyPaused(): boolean | undefined;
     get sourceIsPaused(): boolean | undefined;
     get broadcastIsPaused(): boolean | undefined;
     get sinkIsPaused(): boolean | undefined;
     readonly on: EventEmitter<TrackEventMap>["on"];
     readonly off: EventEmitter<TrackEventMap>["off"];
     protected readonly emitter: EventEmitter<TrackEventMap, any>;
+    protected _locallyPaused?: boolean;
     protected _sourceIsPaused?: boolean;
     protected _broadcastIsPaused?: boolean;
     protected _sinkIsPaused?: boolean;
@@ -142,32 +144,32 @@ export declare class Producer extends Track {
     get id(): ProducerId;
     get kind(): "audio" | "video";
     get track(): MediaStreamTrack | null;
-    get locallyPaused(): boolean;
     start(): Promise<void>;
     stop(): Promise<void>;
     close(): void;
-    get sourceIsPaused(): boolean;
     set broadcastIsPaused(pause: boolean);
     constructor(producer: MediaSoup.Producer, getTrack: () => Promise<MediaStreamTrack>, requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
+    private setLocallyPaused;
+    private updatePauseState;
 }
 export declare class Consumer extends Track {
+    private consumer;
     get id(): ProducerId;
     get kind(): "audio" | "video" | undefined;
-    get track(): MediaStreamTrack | undefined;
-    get locallyPaused(): true;
+    get track(): MediaStreamTrack;
     start(): Promise<void>;
     stop(): Promise<void>;
     close(): void;
     set sourceIsPaused(paused: boolean);
     set broadcastIsPaused(pause: boolean);
     set sinkIsPaused(pause: boolean);
-    constructor(consumer: Promise<MediaSoup.Consumer>, requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
-    private consumerPromise;
-    private consumer?;
+    constructor(consumer: MediaSoup.Consumer, requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
+    private setLocallyPaused;
+    private updatePauseState;
 }
 export declare type TrackEventMap = {
     close: () => void;
-    locallyPaused: (id: ProducerId, paused: boolean) => void;
+    locallyPaused: (paused: boolean) => void;
     sourceIsPaused: (paused: boolean) => void;
     broadcastIsPaused: (paused: boolean) => void;
     sinkIsPaused: (paused: boolean) => void;

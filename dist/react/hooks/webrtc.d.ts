@@ -77,7 +77,7 @@ export declare const useScreenshare: (ctx?: import("../rtcContext").WebRtcManage
 export declare const useStream: (audioLocation?: TrackLocation | undefined, videoLocation?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => MediaStream | undefined;
 export declare const useTrack: (location?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => {
     stream: MediaStream | undefined;
-    kind: "video" | "audio" | undefined;
+    kind: "audio" | "video" | undefined;
     pause: {
         locally: boolean | undefined;
         atSource: boolean | undefined;
