@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
-import { ProducerId, SfuId, Track } from "../../network/sfu";
+import { ProducerId, SfuId, Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { StreamSender, WebRtcContext } from "../rtcContext";
 
@@ -22,6 +22,8 @@ export const useStream = (
         videoTrack.result,
     );
 };
+
+export type Track = ReturnType<typeof useTrack>;
 
 export const useTrack = (
     location?: TrackLocation,
@@ -67,7 +69,7 @@ const useTrackSender = (
 };
 
 const useTrackPauseState = (
-    track?: Track,
+    track?: SfuTrack,
 ) => {
     const _rerender = useRerender();
     const rerender = (e: any) => {
