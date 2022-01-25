@@ -74,8 +74,6 @@ export declare const useScreenshare: (ctx?: import("../rtcContext").WebRtcManage
     };
     stream: MediaStream | undefined;
 };
-export declare const useStream: (audioLocation?: TrackLocation | undefined, videoLocation?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => MediaStream | undefined;
-export declare type Track = ReturnType<typeof useTrack>;
 export declare const useTrack: (location?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => {
     stream: MediaStream | undefined;
     kind: "audio" | "video" | undefined;
@@ -100,5 +98,6 @@ export declare const useTrack: (location?: TrackLocation | undefined, ctx?: impo
         } | undefined;
     } | undefined, [paused: boolean]>;
 };
+export declare type Track = ReturnType<typeof useTrack>;
 export declare const useMediaStreamTracks: (...tracks: Array<MediaStreamTrack | null | undefined>) => MediaStream | undefined;
 //# sourceMappingURL=webrtc.d.ts.map

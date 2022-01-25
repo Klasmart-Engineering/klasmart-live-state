@@ -1,8 +1,8 @@
 import { ReactNode } from "react";
-import { SfuId } from "../network/sfu";
 export interface WebRtcProviderProps {
     children?: ReactNode;
-    getSfuUrl: (id: SfuId) => URL;
+    endpoint: URL;
+    sessionId?: string;
 }
-export declare function WebRtcProvider({ children, getSfuUrl, }: WebRtcProviderProps): JSX.Element;
+export declare function WebRtcProvider({ children, endpoint, sessionId, }: WebRtcProviderProps): JSX.Element;
 //# sourceMappingURL=rtcProvider.d.ts.map

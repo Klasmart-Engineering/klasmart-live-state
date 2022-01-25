@@ -1,17 +1,18 @@
 import React, { ReactNode, useMemo } from "react";
-import { SfuId } from "../network/sfu";
 import { WebRtcContext, WebRtcManager } from "./rtcContext";
 
 export interface WebRtcProviderProps {
     children?: ReactNode;
-    getSfuUrl: (id: SfuId) => URL;
+    endpoint: URL;
+    sessionId?: string;
 }
 
 export function WebRtcProvider({
     children,
-    getSfuUrl,
+    endpoint,
+    sessionId,
 }: WebRtcProviderProps) {
-    const value = useMemo(() => new WebRtcManager(getSfuUrl), []);
+    const value = useMemo(() => new WebRtcManager(endpoint, sessionId), []);
     return (
         <WebRtcContext.Provider value={value}>
             {children}

@@ -1,9 +1,11 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
-import { SFU, SfuId } from "../network/sfu";
+import { SFU } from "../network/sfu";
 import { TrackLocation } from "./hooks/webrtc";
+import { Room } from "../network/room";
 export declare class WebRtcManager {
-    readonly getUrl: (id: SfuId) => URL;
+    readonly endpoint: URL;
+    readonly sessionId?: string | undefined;
     microphoneConstraints?: MediaStreamConstraints["audio"];
     readonly microphone: TrackSender;
     cameraConstraints?: MediaStreamConstraints["video"];
@@ -13,9 +15,12 @@ export declare class WebRtcManager {
     getTrack({ sfuId, producerId }: TrackLocation): Promise<import("../network/sfu").Producer | import("../network/sfu").Consumer>;
     pauseForEveryone({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     pause({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
-    constructor(getUrl: (id: SfuId) => URL);
+    readonly room: Room;
+    constructor(endpoint: URL, sessionId?: string | undefined);
     private readonly sfus;
     private sfu;
+    private selectSfu;
+    private getSfuUrl;
 }
 export declare class StreamSender {
     private readonly getSfu;
@@ -24,7 +29,7 @@ export declare class StreamSender {
     stop(): Promise<void>;
     readonly videoSender: TrackSender;
     readonly audioSender: TrackSender;
-    constructor(getSfu: () => SFU, getStream: () => Promise<MediaStream>);
+    constructor(getSfu: () => Promise<SFU>, getStream: () => Promise<MediaStream>);
 }
 export declare const WebRtcContext: React.Context<WebRtcManager>;
 //# sourceMappingURL=rtcContext.d.ts.map

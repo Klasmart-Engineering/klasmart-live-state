@@ -10,21 +10,6 @@ export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx
 export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone);
 export const useScreenshare = (ctx = useContext(WebRtcContext)) => useStreamSender(ctx.screenshare);
 
-export const useStream = (
-    audioLocation?: TrackLocation,
-    videoLocation?: TrackLocation,
-    ctx = useContext(WebRtcContext),
-) => {
-    const audioTrack = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l))?.track, [audioLocation]);
-    const videoTrack = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l))?.track, [videoLocation]);
-    return useMediaStreamTracks(
-        audioTrack.result,
-        videoTrack.result,
-    );
-};
-
-export type Track = ReturnType<typeof useTrack>;
-
 export const useTrack = (
     location?: TrackLocation,
     ctx = useContext(WebRtcContext),
@@ -40,6 +25,8 @@ export const useTrack = (
         globalPause: useAsyncCallback(async (paused: boolean) => (await track.currentPromise)?.requestBroadcastStateChange(paused)),
     };
 };
+
+export type Track = ReturnType<typeof useTrack>;
 
 const useStreamSender = (
     streamSender: StreamSender,

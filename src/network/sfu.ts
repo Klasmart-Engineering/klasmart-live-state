@@ -106,10 +106,11 @@ export class SFU {
 
     public async produceTrack(
         getTrack: () => Promise<MediaStreamTrack>,
-        name: string
+        name: string,
+        sessionId?: string
     ) {
         const producer: Producer = new Producer(
-            await this.createProducer(getTrack, name),
+            await this.createProducer(getTrack, name, sessionId),
             getTrack,
             (paused: boolean) => this.changeBroadcastState(producer.id,paused),
         );
@@ -153,7 +154,8 @@ export class SFU {
 
     private async createProducer(
         getTrack: () => Promise<MediaStreamTrack>,
-        name: string
+        name: string,
+        sessionId?: string,
     ) {
         const producerTransport = await this.producerTransport();
         
@@ -165,7 +167,10 @@ export class SFU {
             track,
             zeroRtpOnPause: true,
             disableTrackOnPause: false,
-            appData: {name},
+            appData: {
+                name,
+                sessionId,
+            },
         });
     }
 

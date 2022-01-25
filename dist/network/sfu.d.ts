@@ -85,7 +85,7 @@ export declare class SFU {
     readonly id: SfuId;
     readonly url: string;
     getTrack(producerId: ProducerId): Promise<Producer | Consumer>;
-    produceTrack(getTrack: () => Promise<MediaStreamTrack>, name: string): Promise<Producer>;
+    produceTrack(getTrack: () => Promise<MediaStreamTrack>, name: string, sessionId?: string): Promise<Producer>;
     consumeTrack(producerId: ProducerId): Promise<Consumer>;
     private readonly device;
     private readonly promiseCompleter;

@@ -1,26 +1,29 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
-import { SFU, SfuId, newSfuID } from "../network/sfu";
+import { SFU, SfuId } from "../network/sfu";
 import { TrackLocation } from "./hooks/webrtc";
+import { Room } from "../network/room";
 
 export class WebRtcManager {
     public microphoneConstraints?: MediaStreamConstraints["audio"];
     public readonly microphone = new TrackSender(
-        () => this.sfu(),
+        () => this.selectSfu(),
         microphoneGetter(() => this.microphoneConstraints),
         "user",
+        this.sessionId,
     );
     
     public cameraConstraints?: MediaStreamConstraints["video"];
     public readonly camera = new TrackSender(
-        () => this.sfu(),
+        () => this.selectSfu(),
         cameraGetter(() => this.cameraConstraints),
         "user",
+        this.sessionId,
     );
 
     public screenCaptureConstraints?: DisplayMediaStreamConstraints;
     public readonly screenshare = new StreamSender(
-        () => this.sfu(),
+        () => this.selectSfu(),
         screenCaptureGetter(() => this.screenCaptureConstraints),
     );
 
@@ -40,21 +43,36 @@ export class WebRtcManager {
         await sfu.setPauseState(producerId, paused);
     }
 
+    public readonly room: Room;
+
     public constructor(
-        public readonly getUrl: (id: SfuId) => URL,
-    ) {}
+        public readonly endpoint: URL,
+        public readonly sessionId?: string,
+    ) {
+        endpoint.protocol = endpoint.protocol === "https" ? "wss" : "ws";
+        const wsEndpoint = new URL(endpoint);
+        wsEndpoint.pathname += "room";
+        this.room = new Room("ws://localhost:8002/room");
+    }
 
     private readonly sfus = new Map<SfuId, SFU>();
 
-    private sfu(id: SfuId = newSfuID("test-sfu")) {
+    private sfu(id: SfuId) {
         let sfu = this.sfus.get(id);
         if (!sfu) {
-            const url = this.getUrl(id).toString();
+            const url = this.getSfuUrl(id);
             sfu = new SFU(id, url);
             this.sfus.set(id, sfu);
         }
         return sfu;
     }
+
+    private async selectSfu() {
+        const id = await this.room.sfuId();
+        return this.sfu(id);
+    }
+
+    private getSfuUrl(id?: SfuId) { return `ws://localhost:8080/sfuid/${id}`;}
 }
 
 export class StreamSender {
@@ -84,7 +102,7 @@ export class StreamSender {
     );
 
     public constructor(
-        private readonly getSfu: () => SFU,
+        private readonly getSfu: () => Promise<SFU>,
         private readonly getStream: () => Promise<MediaStream>,
     ) {}
 }
