@@ -1,7 +1,9 @@
 import { ProducerId, SfuId } from "./sfu";
-export declare type TrackInfo = {
+export declare type TrackLocation = {
     sfuId: SfuId;
     producerId: ProducerId;
+};
+export declare type TrackInfo = TrackLocation & {
     name?: string;
     sessionId?: string;
 };
@@ -17,20 +19,26 @@ export declare class Room {
     readonly on: Room["emitter"]["on"];
     readonly off: Room["emitter"]["off"];
     readonly once: Room["emitter"]["once"];
-    tracks(): Promise<IterableIterator<TrackInfo>>;
-    sfuId(): Promise<SfuId>;
+    tracks(): TrackInfo[];
+    getSessionTracks(sessionId: string): TrackInfo[];
+    getSfuId(): Promise<SfuId>;
     constructor(endpoint: string);
     private readonly ws;
     private readonly emitter;
+    private sessionMap;
     private _trackMap?;
     private _sfuId?;
     private onTransportStateChange;
     private onTransportMessage;
     private handleMessage;
-    private trackMap;
+    private addTrackInfo;
+    private removeTrackInfo;
+    private addProduceIdToSession;
+    private removeProducerIdFromSession;
+    private setSfuId;
 }
 export declare type RoomEventMap = {
-    changed: (tracks: Map<ProducerId, TrackInfo>) => void;
+    tracksUpdated: (tracks: Map<ProducerId, TrackInfo>) => void;
     disconnected: () => void;
     sfuId: (sfuId: SfuId) => void;
 };

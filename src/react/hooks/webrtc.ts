@@ -1,21 +1,29 @@
 import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
-import { ProducerId, SfuId, Track as SfuTrack } from "../../network/sfu";
+import { TrackLocation } from "../../network/room";
+import { Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { StreamSender, WebRtcContext } from "../rtcContext";
 
-export type TrackLocation = { sfuId: SfuId, producerId: ProducerId }
 
 export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.camera);
 export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone);
 export const useScreenshare = (ctx = useContext(WebRtcContext)) => useStreamSender(ctx.screenshare);
+export const useSessionTrackInfoList = (sessionId: string, ctx = useContext(WebRtcContext)) => {
+    const rerender = useRerender();
+    useEffect(() => {
+        ctx.room.on("tracksUpdated", rerender);
+        return () => { ctx.room.off("tracksUpdated", rerender); };
+    });
+    return ctx.room.getSessionTracks(sessionId);
+};
 
 export const useTrack = (
     location?: TrackLocation,
     ctx = useContext(WebRtcContext),
 ) => {
     const track = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l)), [location]);
-
+    console.log({location,track});
     return {
         stream: useMediaStreamTracks(track.result?.track),
         kind: track.result?.kind,
@@ -66,25 +74,20 @@ const useTrackPauseState = (
     
     useEffect(() => {
         if(!track) { return; }
-        console.log(`track(${track?.track?.id}) - listen on`);
-        track.on("locallyPaused", rerender);
-        track.on("sourceIsPaused", rerender);
-        track.on("broadcastIsPaused", rerender);
-        track.on("sinkIsPaused", rerender);
+        track.on("pausedAtSource", rerender);
+        track.on("pausedGlobally", rerender);
+        track.on("pausedLocally", rerender);
         return () => {
-            console.log(`track(${track?.track?.id}) - listen off`);
-            track.off("locallyPaused", rerender);
-            track.off("sourceIsPaused", rerender);
-            track.off("broadcastIsPaused", rerender);
-            track.off("sinkIsPaused", rerender);
+            track.off("pausedAtSource", rerender);
+            track.off("pausedGlobally", rerender);
+            track.off("pausedLocally", rerender);
         };
     });
     
     return {
-        locally: track?.locallyPaused,
-        atSource: track?.sourceIsPaused,
-        atBroadcast: track?.broadcastIsPaused,
-        atSink: track?.sinkIsPaused,
+        atSource: track?.pausedAtSource,
+        globally: track?.pausedGlobally,
+        locally: track?.pausedLocally,
     };
 };
 

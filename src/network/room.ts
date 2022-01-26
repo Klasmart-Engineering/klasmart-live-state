@@ -2,9 +2,9 @@ import { ProducerId, SfuId } from "./sfu";
 import { TransportState, WSTransport } from "./websocketTransport";
 import EventEmitter from "eventemitter3";
 
-export type TrackInfo = {
-    sfuId: SfuId,
-    producerId: ProducerId,
+export type TrackLocation = { sfuId: SfuId, producerId: ProducerId }
+
+export type TrackInfo = TrackLocation & {
     name?: string,
     sessionId?: string,
 };
@@ -22,12 +22,16 @@ export class Room {
     public readonly off: Room["emitter"]["off"] = (event, listener) => this.emitter.off(event, listener);
     public readonly once: Room["emitter"]["once"] = (event, listener) => this.emitter.once(event, listener);
 
-    public async tracks(): Promise<IterableIterator<TrackInfo>> {
-        const trackMap = await this.trackMap();
-        return trackMap.values();
+    public tracks() { return [...(this._trackMap ?? []).values()]; }
+
+    public getSessionTracks(sessionId: string): TrackInfo[] {
+        this.ws.connect();
+        const producerIds = this.sessionMap.get(sessionId);
+        if(!producerIds) { return []; }
+        return [...producerIds.values()].flatMap(id => this._trackMap?.get(id) || []);
     }
 
-    public async sfuId() {
+    public async getSfuId() {
         if(this._sfuId) {return this._sfuId;}
         this.ws.connect();
         return await new Promise<SfuId>(resolve => this.once("sfuId", id => resolve(id)));
@@ -49,6 +53,7 @@ export class Room {
 
     private readonly ws: WSTransport;
     private readonly emitter = new EventEmitter<RoomEventMap>();
+    private sessionMap = new Map<string, Set<ProducerId>>();
     private _trackMap?: Map<ProducerId,TrackInfo>;
     private _sfuId?: SfuId;
 
@@ -69,31 +74,49 @@ export class Room {
     }
 
     private handleMessage(e: TrackInfoEvent) {
-        if("add" in e) {
-            if(!this._trackMap) {this._trackMap = new Map<ProducerId,TrackInfo>(); }
-            this._trackMap.set(e.add.producerId, e.add);
-            this.emitter.emit("changed", this._trackMap);
-        }
-        if("remove" in e) {
-            if(this._trackMap?.delete(e.remove)) {
-                this.emitter.emit("changed", this._trackMap);
-            }
-        }
-        if("sfuId" in e) {
-            this._sfuId = e.sfuId;
-            this.emitter.emit("sfuId", e.sfuId);
-        }
+        if("add" in e) { this.addTrackInfo(e.add); }
+        if("remove" in e) { this.removeTrackInfo(e.remove); }
+        if("sfuId" in e) { this.setSfuId(e.sfuId); }
     }
 
-    private async trackMap() {
-        if(this._trackMap) { return this._trackMap; }
-        this.ws.connect();
-        return await new Promise<Map<ProducerId,TrackInfo>>(resolve => this.once("changed", trackMap => resolve(trackMap)));
+    private addTrackInfo(trackInfo: TrackInfo) {
+        if(trackInfo.sessionId) { this.addProduceIdToSession(trackInfo.sessionId, trackInfo.producerId); }
+        if(!this._trackMap) {this._trackMap = new Map<ProducerId,TrackInfo>(); }
+        this._trackMap.set(trackInfo.producerId, trackInfo);
+        this.emitter.emit("tracksUpdated", this._trackMap);
+    }
+
+    private removeTrackInfo(id: ProducerId) {
+        if(!this._trackMap) { return; }
+        this.removeProducerIdFromSession(id);
+        this._trackMap.delete(id);
+        this.emitter.emit("tracksUpdated", this._trackMap);
+    }
+
+    private addProduceIdToSession(sessionId: string, producerId: ProducerId) {
+        let sessionTracks = this.sessionMap.get(sessionId);
+        if(!sessionTracks) {
+            sessionTracks = new Set<ProducerId>();
+            this.sessionMap.set(sessionId, sessionTracks);
+        }
+        sessionTracks.add(producerId);
+    }
+
+    private removeProducerIdFromSession(id: ProducerId) {
+        if(!this._trackMap) { return; }
+        const trackInfo = this._trackMap.get(id);
+        if(!trackInfo || !trackInfo.sessionId) { return; }
+        this.sessionMap.get(trackInfo.sessionId)?.delete(id);
+    }
+
+    private setSfuId(id: SfuId) {
+        this._sfuId = id;
+        this.emitter.emit("sfuId", id);
     }
 }
 
 export type RoomEventMap = {
-    changed: (tracks: Map<ProducerId,TrackInfo>) => void;
+    tracksUpdated: (tracks: Map<ProducerId,TrackInfo>) => void;
     disconnected: () => void;
     sfuId: (sfuId: SfuId) => void; 
 }

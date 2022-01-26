@@ -1,15 +1,14 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
 import { SFU, SfuId } from "../network/sfu";
-import { TrackLocation } from "./hooks/webrtc";
-import { Room } from "../network/room";
+import { Room, TrackLocation } from "../network/room";
 
 export class WebRtcManager {
     public microphoneConstraints?: MediaStreamConstraints["audio"];
     public readonly microphone = new TrackSender(
         () => this.selectSfu(),
         microphoneGetter(() => this.microphoneConstraints),
-        "user",
+        "microphone",
         this.sessionId,
     );
     
@@ -17,7 +16,7 @@ export class WebRtcManager {
     public readonly camera = new TrackSender(
         () => this.selectSfu(),
         cameraGetter(() => this.cameraConstraints),
-        "user",
+        "camera",
         this.sessionId,
     );
 
@@ -34,13 +33,13 @@ export class WebRtcManager {
     public async pauseForEveryone({sfuId, producerId}: TrackLocation, paused: boolean) {
         const sfu = this.sfus.get(sfuId);
         if(!sfu) {throw new Error(`Not connected to SFU(${sfuId})`); }
-        await sfu.changeBroadcastState(producerId, paused);
+        await sfu.pauseGlobally(producerId, paused);
     }
 
     public async pause({sfuId, producerId}: TrackLocation, paused: boolean) {
         const sfu = this.sfus.get(sfuId);
         if(!sfu) {throw new Error(`Not connected to SFU(${sfuId})`); }
-        await sfu.setPauseState(producerId, paused);
+        await sfu.pause(producerId, paused);
     }
 
     public readonly room: Room;
@@ -68,7 +67,7 @@ export class WebRtcManager {
     }
 
     private async selectSfu() {
-        const id = await this.room.sfuId();
+        const id = await this.room.getSfuId();
         return this.sfu(id);
     }
 
@@ -93,12 +92,12 @@ export class StreamSender {
     public readonly videoSender = new TrackSender(
         this.getSfu,
         () => videoTrack(this.getStream()),
-        "screen",
+        "screenshare",
     );
     public readonly audioSender = new TrackSender(
         this.getSfu,
         () => audioTrack(this.getStream()),
-        "screen",
+        "screenshare",
     );
 
     public constructor(

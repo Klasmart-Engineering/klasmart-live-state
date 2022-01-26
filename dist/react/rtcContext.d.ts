@@ -1,8 +1,7 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
 import { SFU } from "../network/sfu";
-import { TrackLocation } from "./hooks/webrtc";
-import { Room } from "../network/room";
+import { Room, TrackLocation } from "../network/room";
 export declare class WebRtcManager {
     readonly endpoint: URL;
     readonly sessionId?: string | undefined;
