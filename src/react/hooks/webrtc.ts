@@ -22,15 +22,19 @@ export const useTrack = (
     location?: TrackLocation,
     ctx = useContext(WebRtcContext),
 ) => {
-    const track = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l)), [location]);
-    console.log({location,track});
+    const {
+        currentPromise: trackPromise,
+        result: track
+    } = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l)), [location]);
+
     return {
-        stream: useMediaStreamTracks(track.result?.track),
-        kind: track.result?.kind,
-        pause: useTrackPauseState(track.result),
-        start: useAsyncCallback(async () => (await track.currentPromise)?.start()),
-        stop: useAsyncCallback(async () => (await track.currentPromise)?.stop()),
-        globalPause: useAsyncCallback(async (paused: boolean) => (await track.currentPromise)?.requestBroadcastStateChange(paused)),
+        ...useTrackState(track),
+        stream: useMediaStreamTracks(track?.track),
+        kind: track?.kind,
+        // pause: useTrackPauseState(track),
+        start: useAsyncCallback(async () => (await trackPromise)?.start()),
+        stop: useAsyncCallback(async () => (await trackPromise)?.stop()),
+        globalPause: useAsyncCallback(async (paused: boolean) => (await trackPromise)?.requestBroadcastStateChange(paused)),
     };
 };
 
@@ -54,12 +58,42 @@ const useTrackSender = (
 ) => {
     console.log("useTrackSender", trackSender);
     return {
-        paused: useTrackPauseState(trackSender.producer),
+        ...useTrackState(trackSender.producer),
+        // paused: useTrackPauseState(trackSender.producer),
         stream: useMediaStreamTracks(trackSender.producer?.track),
         start: useAsyncCallback(() => trackSender.start()),
         stop: useAsyncCallback(() => trackSender.producer?.stop()),
         location: trackSender.location,
         globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
+    };
+};
+
+const useTrackState = (
+    track?: SfuTrack,
+) => {
+    const rerender = useRerender();
+    
+    useEffect(() => {
+        if(!track) { return; }
+        track.on("pausedAtSource", rerender);
+        track.on("pausedGlobally", rerender);
+        track.on("pausedLocally", rerender);
+        return () => {
+            track.off("pausedAtSource", rerender);
+            track.off("pausedGlobally", rerender);
+            track.off("pausedLocally", rerender);
+        };
+    });
+
+    const isActiveLocally = track?.pausedLocally === false;
+    const isActiveAtProducer = track?.pausedAtSource === false;
+    const isActiveGlobally = isActiveAtProducer && track?.pausedGlobally === false;
+    
+    return {
+        isConsumable: isActiveGlobally && isActiveLocally,
+        isPausedLocally: track?.pausedLocally !== false,
+        isPausedGlobally: track?.pausedGlobally !== false,
+        isPausedAtSource: track?.pausedAtSource !== false,
     };
 };
 
@@ -83,7 +117,7 @@ const useTrackPauseState = (
             track.off("pausedLocally", rerender);
         };
     });
-    
+
     return {
         atSource: track?.pausedAtSource,
         globally: track?.pausedGlobally,
