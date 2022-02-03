@@ -2,7 +2,7 @@ import { types as MediaSoup, Device } from "mediasoup-client";
 import { NewType } from "../types";
 import { TransportState, WSTransport } from "../network/websocketTransport";
 import { PromiseCompleter } from "../network/promiseCompleter";
-import { ExecuteOnce } from "../executeOnce";
+import { Memoize } from "../memoize";
 import EventEmitter from "eventemitter3";
 
 export type SfuId = NewType<string, "sfuId">
@@ -196,8 +196,7 @@ export class SFU {
         return await this.request({pause: {id, paused}});
     }
 
-    @ExecuteOnce()
-    private async consumerTransport() {
+    private consumerTransport = Memoize(async () => {
         await this.loadDevice();
         const response = await this.request({ createConsumerTransport: {} });
         if (!response) { throw new Error("Empty response from SFU"); }
@@ -207,10 +206,9 @@ export class SFU {
         const transport = this.device.createRecvTransport(consumerTransportCreated);
         transport.on("connect", ({ dtlsParameters }, success, error) => this.request({ connectConsumerTransport: { dtlsParameters } }).then(success, error));
         return transport;
-    }
+    });
 
-    @ExecuteOnce()
-    private async producerTransport() {
+    private producerTransport = Memoize(async () => {
         await this.loadDevice();
         const result = await this.request({ createProducerTransport: {} });
         if (!result) { throw new Error("Empty response from SFU"); }
@@ -231,22 +229,21 @@ export class SFU {
             }
         });
         return transport;
-    }
+    });
 
 
-    @ExecuteOnce()
-    private async sendRtpCapabilities() {
+    private sendRtpCapabilities = Memoize(async () => {
         await this.request({ setRtpCapabilities: this.device.rtpCapabilities });
-    }
+    });
 
-    @ExecuteOnce()
-    private async loadDevice() {
+
+    private loadDevice = Memoize(async () => {
         const response = await this.request({ getRouterRtpCapabilities: {} });
         if (!response) { throw new Error("Empty routerRtpCapabilities response from SFU"); }
         const routerRtpCapabilities = response.routerRtpCapabilities;
         if (!routerRtpCapabilities) { throw new Error("Response from SFU does not contain routerRtpCapabilities"); }
         await this.device.load({ routerRtpCapabilities });
-    }
+    });
 
     private async request(request: Request) {
         const id = this.generateRequestId();

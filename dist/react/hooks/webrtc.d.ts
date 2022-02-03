@@ -1,10 +1,5 @@
 import { TrackLocation } from "../../network/room";
 export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) => {
-    paused: {
-        atSource: boolean | undefined;
-        globally: boolean | undefined;
-        locally: boolean | undefined;
-    };
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
@@ -24,13 +19,12 @@ export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) =>
             rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
         } | undefined;
     } | undefined, [paused: boolean]>;
+    isConsumable: boolean;
+    isPausedLocally: boolean;
+    isPausedGlobally: boolean;
+    isPausedAtSource: boolean;
 };
 export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager) => {
-    paused: {
-        atSource: boolean | undefined;
-        globally: boolean | undefined;
-        locally: boolean | undefined;
-    };
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
@@ -50,6 +44,10 @@ export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager
             rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
         } | undefined;
     } | undefined, [paused: boolean]>;
+    isConsumable: boolean;
+    isPausedLocally: boolean;
+    isPausedGlobally: boolean;
+    isPausedAtSource: boolean;
 };
 export declare const useScreenshare: (ctx?: import("../rtcContext").WebRtcManager) => {
     start: import("react-async-hook").UseAsyncReturn<void, []>;
@@ -70,11 +68,6 @@ export declare const useSessionTrackInfoList: (sessionId: string, ctx?: import("
 export declare const useTrack: (location?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => {
     stream: MediaStream | undefined;
     kind: "audio" | "video" | undefined;
-    pause: {
-        atSource: boolean | undefined;
-        globally: boolean | undefined;
-        locally: boolean | undefined;
-    };
     start: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
     globalPause: import("react-async-hook").UseAsyncReturn<void | {
@@ -89,6 +82,10 @@ export declare const useTrack: (location?: TrackLocation | undefined, ctx?: impo
             rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
         } | undefined;
     } | undefined, [paused: boolean]>;
+    isConsumable: boolean;
+    isPausedLocally: boolean;
+    isPausedGlobally: boolean;
+    isPausedAtSource: boolean;
 };
 export declare type Track = ReturnType<typeof useTrack>;
 export declare const useMediaStreamTracks: (...tracks: Array<MediaStreamTrack | null | undefined>) => MediaStream | undefined;
