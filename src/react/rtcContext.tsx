@@ -45,13 +45,14 @@ export class WebRtcManager {
     public readonly room: Room;
 
     public constructor(
-        public readonly endpoint: URL,
+        public readonly baseEndpoint: URL,
         public readonly sessionId?: string,
     ) {
-        endpoint.protocol = endpoint.protocol === "https" ? "wss" : "ws";
-        const wsEndpoint = new URL(endpoint);
+        if(baseEndpoint.protocol === "https:") { baseEndpoint.protocol = "wss:"; }
+        if(baseEndpoint.protocol === "http:") { baseEndpoint.protocol = "ws:"; }
+        const wsEndpoint = new URL(baseEndpoint.toString());
         wsEndpoint.pathname += "room";
-        this.room = new Room("ws://localhost:8002/room");
+        this.room = new Room(wsEndpoint.toString());
     }
 
     private readonly sfus = new Map<SfuId, SFU>();
@@ -71,7 +72,11 @@ export class WebRtcManager {
         return this.sfu(id);
     }
 
-    private getSfuUrl(id?: SfuId) { return `ws://localhost:8080/sfuid/${id}`;}
+    private getSfuUrl(id?: SfuId) {
+        const wsEndpoint = new URL(this.baseEndpoint.toString());
+        wsEndpoint.pathname += `sfuid/${id}`;
+        return wsEndpoint.toString();
+    }
 }
 
 export class StreamSender {
