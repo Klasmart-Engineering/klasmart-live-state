@@ -120,14 +120,17 @@ export declare abstract class Track {
     abstract start(): Promise<void>;
     abstract stop(): Promise<void>;
     abstract close(): void;
+    abstract get isMine(): boolean;
     abstract get pausedLocally(): boolean;
+    protected _pausedAtSource?: boolean;
     get pausedAtSource(): boolean | undefined;
+    set pausedAtSource(paused: boolean | undefined);
+    protected _pausedGlobally?: boolean;
     get pausedGlobally(): boolean | undefined;
+    set pausedGlobally(pause: boolean | undefined);
     readonly on: EventEmitter<TrackEventMap>["on"];
     readonly off: EventEmitter<TrackEventMap>["off"];
     protected readonly emitter: EventEmitter<TrackEventMap, any>;
-    protected _pausedAtSource?: boolean;
-    protected _pausedGlobally?: boolean;
     constructor(requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
 }
 export declare class Producer extends Track {
@@ -137,11 +140,11 @@ export declare class Producer extends Track {
     get id(): ProducerId;
     get kind(): "audio" | "video";
     get track(): MediaStreamTrack | null;
+    get isMine(): boolean;
     get pausedLocally(): boolean;
     start(): Promise<void>;
     stop(): Promise<void>;
     close(): void;
-    set pausedGlobally(pause: boolean);
     constructor(producer: MediaSoup.Producer, getTrack: () => Promise<MediaStreamTrack>, notifyPause: (paused: boolean) => Promise<void | Result>, requestPauseGlobally: (paused: boolean) => Promise<void | Result>);
     private pause;
 }
@@ -151,20 +154,19 @@ export declare class Consumer extends Track {
     get id(): ProducerId;
     get kind(): "audio" | "video" | undefined;
     get track(): MediaStreamTrack;
+    get isMine(): boolean;
     get pausedLocally(): boolean;
     start(): Promise<void>;
     stop(): Promise<void>;
     close(): void;
-    set pausedAtSource(paused: boolean);
-    set pausedGlobally(pause: boolean);
     constructor(consumer: MediaSoup.Consumer, notifyPause: (paused: boolean) => Promise<void | Result>, requestPauseGlobally: (paused: boolean) => Promise<void | Result>);
     private pause;
 }
 export declare type TrackEventMap = {
     close: () => void;
-    pausedAtSource: (paused: boolean) => void;
-    pausedGlobally: (paused: boolean) => void;
-    pausedLocally: (paused: boolean) => void;
+    pausedAtSource: (paused: boolean | undefined) => void;
+    pausedGlobally: (paused: boolean | undefined) => void;
+    pausedLocally: (paused: boolean | undefined) => void;
 };
 export {};
 //# sourceMappingURL=sfu.d.ts.map

@@ -312,7 +312,7 @@ export class SFU {
     private async onGloballyPaused({ producerId, paused }: PauseEvent) {
         const producer = this.producers.get(producerId);
         if(producer) { producer.pausedGlobally = paused; }
-
+        
         const consumer = await this.consumers.get(producerId);
         if(consumer) { consumer.pausedGlobally = paused; }
     }
@@ -327,30 +327,42 @@ export abstract class Track {
     public abstract stop(): Promise<void>;
     public abstract close(): void;
 
+    public abstract get isMine(): boolean
     public abstract get pausedLocally(): boolean
+
+    protected _pausedAtSource?: boolean;
     public get pausedAtSource() { return this._pausedAtSource; }
+    public set pausedAtSource(paused: boolean | undefined) {
+        console.log("consumer set pausedAtSource", paused);
+        if(this._pausedAtSource === paused) { return; }
+        this._pausedAtSource = paused;
+        this.emitter.emit("pausedAtSource", paused);
+    }
+    
+    protected _pausedGlobally?: boolean;
     public get pausedGlobally() { return this._pausedGlobally; }
+    public set pausedGlobally(pause: boolean | undefined) {
+        console.log("consumer set pausedGlobally", pause);
+        if(this._pausedGlobally === pause) { return; }
+        this._pausedGlobally = pause;
+        this.emitter.emit("pausedGlobally", pause);
+    }
 
     public readonly on: EventEmitter<TrackEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
     public readonly off: EventEmitter<TrackEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
-
     protected readonly emitter = new EventEmitter<TrackEventMap>();
-
-    protected _pausedAtSource?: boolean;
-    protected _pausedGlobally?: boolean;
 
     public constructor(
         public readonly requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>
-    ) {
-        console.log("track constructor");
-    }
+    ) { }
 }
 
 export class Producer extends Track {
     public get id() { return newProducerID(this.producer.id); }
     public get kind() { return this.producer.kind as "audio"|"video"; }
     public get track() { return this.producer.track; }
-    public get pausedLocally() { return this.producer.paused; }
+    public override get isMine() { return true; }
+    public override get pausedLocally() { return this.producer.paused; }
 
     public async start() {
         if(this.track?.readyState !== "live") {
@@ -368,12 +380,6 @@ export class Producer extends Track {
     }
 
     public close() { this.producer.close(); }
-    
-    public override set pausedGlobally(pause: boolean) {
-        if(this._pausedGlobally === pause) { return; }
-        this._pausedGlobally = pause;
-        this.emitter.emit("pausedGlobally", pause);
-    }
 
     public constructor(
         private readonly producer: MediaSoup.Producer,
@@ -405,23 +411,12 @@ export class Consumer extends Track {
     }
     public get kind() { return this.consumer.kind as "audio"|"video"|undefined; }
     public get track() { return this.consumer.track; }
-    public get pausedLocally() { return this.consumer.paused; }
+    public override get isMine() { return false; }
+    public override get pausedLocally() { return this.consumer.paused; }
 
     public async start() { await this.pause(false); }
     public async stop() { await this.pause(true); }
     public close() { this.consumer.close(); }
-
-    public override set pausedAtSource(paused: boolean) {
-        if(this._pausedAtSource === paused) { return; }
-        this._pausedAtSource = paused;
-        this.emitter.emit("pausedAtSource", paused);
-    }
-
-    public override set pausedGlobally(pause: boolean) {
-        if(this._pausedGlobally === pause) { return; }
-        this._pausedGlobally = pause;
-        this.emitter.emit("pausedGlobally", pause);
-    }
 
     public constructor (
         private consumer: MediaSoup.Consumer,
@@ -449,7 +444,7 @@ export class Consumer extends Track {
 export type TrackEventMap = {
     close: () => void,
     
-    pausedAtSource: (paused: boolean) => void,
-    pausedGlobally: (paused: boolean) => void,
-    pausedLocally: (paused: boolean) => void,
+    pausedAtSource: (paused: boolean | undefined) => void,
+    pausedGlobally: (paused: boolean | undefined) => void,
+    pausedLocally: (paused: boolean | undefined) => void,
 }

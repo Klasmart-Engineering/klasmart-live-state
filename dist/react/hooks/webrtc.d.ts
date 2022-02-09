@@ -68,8 +68,10 @@ export declare const useSessionTrackInfoList: (sessionId: string, ctx?: import("
 export declare const useTrack: (location?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => {
     stream: MediaStream | undefined;
     kind: "audio" | "video" | undefined;
+    isMine: boolean | undefined;
     start: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
+    pause: import("react-async-hook").UseAsyncReturn<void | undefined, [paused: boolean]>;
     globalPause: import("react-async-hook").UseAsyncReturn<void | {
         routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
         producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
@@ -86,6 +88,7 @@ export declare const useTrack: (location?: TrackLocation | undefined, ctx?: impo
     isPausedLocally: boolean;
     isPausedGlobally: boolean;
     isPausedAtSource: boolean;
+    hasLocation: boolean;
 };
 export declare type Track = ReturnType<typeof useTrack>;
 export declare const useMediaStreamTracks: (...tracks: Array<MediaStreamTrack | null | undefined>) => MediaStream | undefined;

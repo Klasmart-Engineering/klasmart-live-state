@@ -27,13 +27,17 @@ export const useTrack = (
         result: track
     } = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l)), [location]);
 
+    const start = useAsyncCallback(async () => (await trackPromise)?.start());
+    const stop = useAsyncCallback(async () => (await trackPromise)?.stop());
     return {
+        hasLocation: Boolean(location),
         ...useTrackState(track),
         stream: useMediaStreamTracks(track?.track),
         kind: track?.kind,
-        // pause: useTrackPauseState(track),
-        start: useAsyncCallback(async () => (await trackPromise)?.start()),
-        stop: useAsyncCallback(async () => (await trackPromise)?.stop()),
+        isMine: track?.isMine,
+        start,
+        stop,
+        pause: useAsyncCallback(async (paused: boolean) => await (paused ? stop : start).execute()),
         globalPause: useAsyncCallback(async (paused: boolean) => (await trackPromise)?.requestBroadcastStateChange(paused)),
     };
 };
