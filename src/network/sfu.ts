@@ -72,11 +72,14 @@ export type WebRtcTransportResult = {
     sctpParameters?: MediaSoup.SctpParameters,
 }
 
-type Result = {
+export type Result = {
     routerRtpCapabilities?: MediaSoup.RtpCapabilities;
 
     producerTransportCreated?: WebRtcTransportResult;
-    producerCreated?: ProducerId;
+    producerCreated?: {
+        producerId: ProducerId,
+        pausedGlobally: boolean,
+    };
 
     consumerTransportCreated?: WebRtcTransportResult;
     consumerCreated?: {
@@ -108,13 +111,7 @@ export class SFU {
         name: string,
         sessionId?: string
     ) {
-        const producer: Producer = new Producer(
-            await this.createProducer(getTrack, name, sessionId),
-            getTrack,
-            (paused: boolean) => this.pause(producer.id, paused),
-            (paused: boolean) => this.pauseGlobally(producer.id, paused),
-        );
-        this.producers.set(producer.id, producer);
+        const producer = await this.createProducer(getTrack, name, sessionId);
         await this.pause(producer.id, false);
         return producer;
     }
@@ -147,7 +144,8 @@ export class SFU {
         this.ws.connect().catch(e => console.error(e));
     }
     
-    private readonly producers = new Map<ProducerId, Producer>();
+    private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
+    private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
 
     private async createProducer(
@@ -161,7 +159,7 @@ export class SFU {
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
         
-        return await producerTransport.produce({
+        const mediaSoupProducer = await producerTransport.produce({
             track,
             zeroRtpOnPause: true,
             disableTrackOnPause: false,
@@ -170,6 +168,20 @@ export class SFU {
                 sessionId,
             },
         });
+        const producer: Producer = new Producer(
+            mediaSoupProducer,
+            getTrack,
+            (paused: boolean) => this.pause(producer.id, paused),
+            (paused: boolean) => this.pauseGlobally(producer.id, paused),
+        );
+        const resolver = this.producerResolvers.get(producer.id);
+        if(resolver) { 
+            this.producerResolvers.delete(producer.id);
+            resolver(producer);
+        } else {
+            console.error(`Could not locate resolver while creating Producer(${producer.id})`);
+        }
+        return producer;
     }
 
     private async createConsumer(producerId: ProducerId) {
@@ -220,10 +232,15 @@ export class SFU {
         transport.on("produce", async (produceTrack, callback, error) => {
             try {
                 const response = await this.request({ produceTrack });
-                if(!response) { return error("Empty response from SFU"); }
+                if(!response) { return error("No response from SFU"); }
                 const { producerCreated } = response;
                 if(!producerCreated) { return error("Empty response from SFU"); }
-                callback({id: producerCreated});
+                const id = producerCreated.producerId; 
+                if(!id) { return error("Malformed response from SFU"); }
+                const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
+                this.producers.set(id, producerPromise);
+                producerPromise.then(p => p.pausedGlobally = producerCreated.pausedGlobally);
+                callback({id});
             } catch(e) {
                 error(e);
             }
@@ -297,7 +314,7 @@ export class SFU {
     }
 
     private async closeTrack(producerId: ProducerId) {
-        this.producers.get(producerId)?.close();
+        (await this.producers.get(producerId))?.close();
         this.producers.delete(producerId);
         
         (await this.consumers.get(producerId))?.close();
@@ -310,7 +327,8 @@ export class SFU {
     }
 
     private async onGloballyPaused({ producerId, paused }: PauseEvent) {
-        const producer = this.producers.get(producerId);
+        const producer = await this.producers.get(producerId);
+        console.log(`Producer(${producer?.id}): Global pause (${producerId},${paused})`);
         if(producer) { producer.pausedGlobally = paused; }
         
         const consumer = await this.consumers.get(producerId);
@@ -329,16 +347,8 @@ export abstract class Track {
 
     public abstract get isMine(): boolean
     public abstract get pausedLocally(): boolean
+    public abstract get pausedAtSource(): boolean | undefined
 
-    protected _pausedAtSource?: boolean;
-    public get pausedAtSource() { return this._pausedAtSource; }
-    public set pausedAtSource(paused: boolean | undefined) {
-        console.log("consumer set pausedAtSource", paused);
-        if(this._pausedAtSource === paused) { return; }
-        this._pausedAtSource = paused;
-        this.emitter.emit("pausedAtSource", paused);
-    }
-    
     protected _pausedGlobally?: boolean;
     public get pausedGlobally() { return this._pausedGlobally; }
     public set pausedGlobally(pause: boolean | undefined) {
@@ -363,6 +373,7 @@ export class Producer extends Track {
     public get track() { return this.producer.track; }
     public override get isMine() { return true; }
     public override get pausedLocally() { return this.producer.paused; }
+    public override get pausedAtSource() { return this.producer.paused; }
 
     public async start() {
         if(this.track?.readyState !== "live") {
@@ -413,6 +424,15 @@ export class Consumer extends Track {
     public get track() { return this.consumer.track; }
     public override get isMine() { return false; }
     public override get pausedLocally() { return this.consumer.paused; }
+    
+    protected _pausedAtSource?: boolean;
+    public get pausedAtSource() { return this._pausedAtSource; }
+    public set pausedAtSource(paused: boolean | undefined) {
+        console.log("consumer set pausedAtSource", paused);
+        if(this._pausedAtSource === paused) { return; }
+        this._pausedAtSource = paused;
+        this.emitter.emit("pausedAtSource", paused);
+    }
 
     public async start() { await this.pause(false); }
     public async stop() { await this.pause(true); }

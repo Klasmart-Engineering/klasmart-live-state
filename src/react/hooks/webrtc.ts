@@ -30,6 +30,7 @@ export const useTrack = (
     const start = useAsyncCallback(async () => (await trackPromise)?.start());
     const stop = useAsyncCallback(async () => (await trackPromise)?.stop());
     return {
+        track,
         hasLocation: Boolean(location),
         ...useTrackState(track),
         stream: useMediaStreamTracks(track?.track),

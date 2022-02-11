@@ -64,10 +64,13 @@ export declare type WebRtcTransportResult = {
     dtlsParameters: MediaSoup.DtlsParameters;
     sctpParameters?: MediaSoup.SctpParameters;
 };
-declare type Result = {
+export declare type Result = {
     routerRtpCapabilities?: MediaSoup.RtpCapabilities;
     producerTransportCreated?: WebRtcTransportResult;
-    producerCreated?: ProducerId;
+    producerCreated?: {
+        producerId: ProducerId;
+        pausedGlobally: boolean;
+    };
     consumerTransportCreated?: WebRtcTransportResult;
     consumerCreated?: {
         id: ConsumerId;
@@ -90,6 +93,7 @@ export declare class SFU {
     private readonly promiseCompleter;
     private readonly ws;
     constructor(id: SfuId, url: string);
+    private readonly producerResolvers;
     private readonly producers;
     private readonly consumers;
     private createProducer;
@@ -122,9 +126,7 @@ export declare abstract class Track {
     abstract close(): void;
     abstract get isMine(): boolean;
     abstract get pausedLocally(): boolean;
-    protected _pausedAtSource?: boolean;
-    get pausedAtSource(): boolean | undefined;
-    set pausedAtSource(paused: boolean | undefined);
+    abstract get pausedAtSource(): boolean | undefined;
     protected _pausedGlobally?: boolean;
     get pausedGlobally(): boolean | undefined;
     set pausedGlobally(pause: boolean | undefined);
@@ -142,6 +144,7 @@ export declare class Producer extends Track {
     get track(): MediaStreamTrack | null;
     get isMine(): boolean;
     get pausedLocally(): boolean;
+    get pausedAtSource(): boolean;
     start(): Promise<void>;
     stop(): Promise<void>;
     close(): void;
@@ -156,6 +159,9 @@ export declare class Consumer extends Track {
     get track(): MediaStreamTrack;
     get isMine(): boolean;
     get pausedLocally(): boolean;
+    protected _pausedAtSource?: boolean;
+    get pausedAtSource(): boolean | undefined;
+    set pausedAtSource(paused: boolean | undefined);
     start(): Promise<void>;
     stop(): Promise<void>;
     close(): void;

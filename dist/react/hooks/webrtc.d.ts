@@ -7,18 +7,7 @@ export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) =>
         sfuId: import("../../network/sfu").SfuId;
         producerId: import("../../network/sfu").ProducerId;
     } | undefined;
-    globalPause: import("react-async-hook").UseAsyncReturn<void | {
-        routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
-        producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
-        producerCreated?: import("../../network/sfu").ProducerId | undefined;
-        consumerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
-        consumerCreated?: {
-            id: import("../../network/sfu").ConsumerId;
-            producerId: import("../../network/sfu").ProducerId;
-            kind: import("mediasoup-client/lib/RtpParameters").MediaKind;
-            rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
-        } | undefined;
-    } | undefined, [paused: boolean]>;
+    globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
     isPausedGlobally: boolean;
@@ -32,18 +21,7 @@ export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager
         sfuId: import("../../network/sfu").SfuId;
         producerId: import("../../network/sfu").ProducerId;
     } | undefined;
-    globalPause: import("react-async-hook").UseAsyncReturn<void | {
-        routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
-        producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
-        producerCreated?: import("../../network/sfu").ProducerId | undefined;
-        consumerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
-        consumerCreated?: {
-            id: import("../../network/sfu").ConsumerId;
-            producerId: import("../../network/sfu").ProducerId;
-            kind: import("mediasoup-client/lib/RtpParameters").MediaKind;
-            rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
-        } | undefined;
-    } | undefined, [paused: boolean]>;
+    globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
     isPausedGlobally: boolean;
@@ -72,22 +50,12 @@ export declare const useTrack: (location?: TrackLocation | undefined, ctx?: impo
     start: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
     pause: import("react-async-hook").UseAsyncReturn<void | undefined, [paused: boolean]>;
-    globalPause: import("react-async-hook").UseAsyncReturn<void | {
-        routerRtpCapabilities?: import("mediasoup-client/lib/RtpParameters").RtpCapabilities | undefined;
-        producerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
-        producerCreated?: import("../../network/sfu").ProducerId | undefined;
-        consumerTransportCreated?: import("../../network/sfu").WebRtcTransportResult | undefined;
-        consumerCreated?: {
-            id: import("../../network/sfu").ConsumerId;
-            producerId: import("../../network/sfu").ProducerId;
-            kind: import("mediasoup-client/lib/RtpParameters").MediaKind;
-            rtpParameters: import("mediasoup-client/lib/RtpParameters").RtpParameters;
-        } | undefined;
-    } | undefined, [paused: boolean]>;
+    globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
     isPausedGlobally: boolean;
     isPausedAtSource: boolean;
+    track: import("../../network/sfu").Producer | import("../../network/sfu").Consumer | undefined;
     hasLocation: boolean;
 };
 export declare type Track = ReturnType<typeof useTrack>;
