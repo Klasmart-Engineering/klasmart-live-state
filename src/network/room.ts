@@ -3,11 +3,18 @@ import { TransportState, WSTransport } from "./websocketTransport";
 import EventEmitter from "eventemitter3";
 
 export type TrackLocation = { sfuId: SfuId, producerId: ProducerId }
+const trackLocationEquals = (a: TrackLocation, b: TrackLocation) =>
+    (a.producerId === b.producerId)
+    && (a.sfuId === b.sfuId);
 
 export type TrackInfo = TrackLocation & {
     name?: string,
     sessionId?: string,
 };
+const trackInfoEquals = (a: TrackInfo, b: TrackInfo) => 
+    trackLocationEquals(a,b)
+    && (a.name === b.name)
+    && (a.sessionId === b.sessionId);
 
 export type TrackInfoEvent = {
     add: TrackInfo
@@ -22,13 +29,13 @@ export class Room {
     public readonly off: Room["emitter"]["off"] = (event, listener) => this.emitter.off(event, listener);
     public readonly once: Room["emitter"]["once"] = (event, listener) => this.emitter.once(event, listener);
 
-    public tracks() { return [...(this._trackMap ?? []).values()]; }
+    public tracks() { return [...(this.trackInfoByProducerId ?? []).values()]; }
 
     public getSessionTracks(sessionId: string): TrackInfo[] {
         this.ws.connect();
         const producerIds = this.sessionMap.get(sessionId);
         if(!producerIds) { return []; }
-        return [...producerIds.values()].flatMap(id => this._trackMap?.get(id) || []);
+        return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId?.get(id) || []);
     }
 
     public async getSfuId() {
@@ -47,14 +54,14 @@ export class Room {
             undefined,
             true,
             null,
-            null,
+            5000,
         );
     }
 
     private readonly ws: WSTransport;
     private readonly emitter = new EventEmitter<RoomEventMap>();
     private sessionMap = new Map<string, Set<ProducerId>>();
-    private _trackMap?: Map<ProducerId,TrackInfo>;
+    private trackInfoByProducerId?: Map<ProducerId,TrackInfo>;
     private _sfuId?: SfuId;
 
     private onTransportStateChange(state: TransportState) {
@@ -65,7 +72,6 @@ export class Room {
         }
     }
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
-        console.log(data);
         if (typeof data !== "string") { return; }
         if(data.length === 0) { return; }
         const events = JSON.parse(data) as TrackInfoEvent[];
@@ -80,20 +86,24 @@ export class Room {
     }
 
     private addTrackInfo(trackInfo: TrackInfo) {
-        if(trackInfo.sessionId) { this.addProduceIdToSession(trackInfo.sessionId, trackInfo.producerId); }
-        if(!this._trackMap) {this._trackMap = new Map<ProducerId,TrackInfo>(); }
-        this._trackMap.set(trackInfo.producerId, trackInfo);
-        this.emitter.emit("tracksUpdated", this._trackMap);
+        const currentTrackInfo = this.trackInfoByProducerId?.get(trackInfo.producerId);
+        if(currentTrackInfo && trackInfoEquals(currentTrackInfo, trackInfo)) { return; }
+
+        if(trackInfo.sessionId) { this.addProducerIdToSession(trackInfo.sessionId, trackInfo.producerId); }
+        if(!this.trackInfoByProducerId) {this.trackInfoByProducerId = new Map<ProducerId,TrackInfo>(); }
+
+        this.trackInfoByProducerId.set(trackInfo.producerId, trackInfo);
+        this.emitter.emit("tracksUpdated", this.trackInfoByProducerId);
     }
 
     private removeTrackInfo(id: ProducerId) {
-        if(!this._trackMap) { return; }
+        if(!this.trackInfoByProducerId) { return; }
         this.removeProducerIdFromSession(id);
-        this._trackMap.delete(id);
-        this.emitter.emit("tracksUpdated", this._trackMap);
+        this.trackInfoByProducerId.delete(id);
+        this.emitter.emit("tracksUpdated", this.trackInfoByProducerId);
     }
 
-    private addProduceIdToSession(sessionId: string, producerId: ProducerId) {
+    private addProducerIdToSession(sessionId: string, producerId: ProducerId) {
         let sessionTracks = this.sessionMap.get(sessionId);
         if(!sessionTracks) {
             sessionTracks = new Set<ProducerId>();
@@ -103,8 +113,8 @@ export class Room {
     }
 
     private removeProducerIdFromSession(id: ProducerId) {
-        if(!this._trackMap) { return; }
-        const trackInfo = this._trackMap.get(id);
+        if(!this.trackInfoByProducerId) { return; }
+        const trackInfo = this.trackInfoByProducerId.get(id);
         if(!trackInfo || !trackInfo.sessionId) { return; }
         this.sessionMap.get(trackInfo.sessionId)?.delete(id);
     }

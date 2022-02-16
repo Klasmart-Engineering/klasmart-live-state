@@ -26,14 +26,14 @@ export declare class Room {
     private readonly ws;
     private readonly emitter;
     private sessionMap;
-    private _trackMap?;
+    private trackInfoByProducerId?;
     private _sfuId?;
     private onTransportStateChange;
     private onTransportMessage;
     private handleMessage;
     private addTrackInfo;
     private removeTrackInfo;
-    private addProduceIdToSession;
+    private addProducerIdToSession;
     private removeProducerIdFromSession;
     private setSfuId;
 }
