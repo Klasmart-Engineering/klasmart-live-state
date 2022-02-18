@@ -5,10 +5,26 @@ import { Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { StreamSender, WebRtcContext } from "../rtcContext";
 
+export const useWebRtcConstraints = (
+    ctx = useContext(WebRtcContext)
+) => {
+    return {
+        getCameraConstraints: () => ctx.cameraConstraints,
+        setCameraConstraints: (
+            constraints?: MediaStreamConstraints["audio"]
+        ) => ctx.cameraConstraints = constraints,
+
+        getMicrophoneConstraints: () => ctx.microphoneConstraints,
+        setMicrophoneConstraints: (
+            constraints?: MediaStreamConstraints["video"]
+        ) => ctx.microphoneConstraints = constraints,
+    };
+};
 
 export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.camera);
 export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone);
 export const useScreenshare = (ctx = useContext(WebRtcContext)) => useStreamSender(ctx.screenshare);
+
 export const useSessionTrackInfoList = (sessionId: string, ctx = useContext(WebRtcContext)) => {
     const rerender = useRerender();
     useEffect(() => {

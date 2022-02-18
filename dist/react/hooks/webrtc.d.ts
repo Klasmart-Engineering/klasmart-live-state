@@ -1,4 +1,10 @@
 import { TrackLocation } from "../../network/room";
+export declare const useWebRtcConstraints: (ctx?: import("../rtcContext").WebRtcManager) => {
+    getCameraConstraints: () => boolean | MediaTrackConstraints | undefined;
+    setCameraConstraints: (constraints?: MediaStreamConstraints["audio"]) => boolean | MediaTrackConstraints | undefined;
+    getMicrophoneConstraints: () => boolean | MediaTrackConstraints | undefined;
+    setMicrophoneConstraints: (constraints?: MediaStreamConstraints["video"]) => boolean | MediaTrackConstraints | undefined;
+};
 export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) => {
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;

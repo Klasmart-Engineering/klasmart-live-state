@@ -32,7 +32,7 @@ export class Room {
     public tracks() { return [...(this.trackInfoByProducerId ?? []).values()]; }
 
     public getSessionTracks(sessionId: string): TrackInfo[] {
-        this.ws.connect();
+        this.ws.connect().catch((e) =>  console.error(e));
         const producerIds = this.sessionMap.get(sessionId);
         if(!producerIds) { return []; }
         return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId?.get(id) || []);
@@ -40,7 +40,7 @@ export class Room {
 
     public async getSfuId() {
         if(this._sfuId) {return this._sfuId;}
-        this.ws.connect();
+        this.ws.connect().catch((e) =>  console.error(e));
         return await new Promise<SfuId>(resolve => this.once("sfuId", id => resolve(id)));
     }
 

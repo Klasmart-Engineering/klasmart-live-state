@@ -1,6 +1,5 @@
 import React, { ReactNode, useMemo } from "react";
 import { WebRtcContext, WebRtcManager } from "./rtcContext";
-
 export interface WebRtcProviderProps {
     children?: ReactNode;
     endpoint: URL;
