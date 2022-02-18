@@ -20,7 +20,7 @@ export declare class WSTransport {
     private onOpen;
     private onClose;
     private onError;
-    private resetNetworkRecieveTimeout;
+    private resetNetworkReceiveTimeout;
     private resetNetworkSendTimeout;
 }
 //# sourceMappingURL=websocketTransport.d.ts.map

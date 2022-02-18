@@ -5,6 +5,8 @@ import { Room, TrackLocation } from "../network/room";
 export declare class WebRtcManager {
     readonly baseEndpoint: URL;
     readonly sessionId?: string | undefined;
+    private onAuthorizationInvalid?;
+    private onAuthorizationExpired?;
     microphoneConstraints?: MediaStreamConstraints["audio"];
     readonly microphone: TrackSender;
     cameraConstraints?: MediaStreamConstraints["video"];
@@ -15,7 +17,8 @@ export declare class WebRtcManager {
     pauseForEveryone({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     pause({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     readonly room: Room;
-    constructor(baseEndpoint: URL, sessionId?: string | undefined);
+    constructor(baseEndpoint: URL, sessionId?: string | undefined, onAuthorizationInvalid?: (() => unknown) | undefined, onAuthorizationExpired?: (() => unknown) | undefined);
+    private onSfuError;
     private readonly sfus;
     private sfu;
     private selectSfu;

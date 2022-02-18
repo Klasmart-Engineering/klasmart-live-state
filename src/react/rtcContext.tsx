@@ -1,7 +1,12 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
-import { SFU, SfuId } from "../network/sfu";
-import { Room, TrackLocation } from "../network/room";
+import { SFU, SfuId, SfuError } from "../network/sfu";
+import {Room, TrackLocation} from "../network/room";
+
+const INVALID_AUTHORIZATION = 4400;
+const EXPIRED_AUTHORIZATION = 4401;
+const NOT_BEFORE = 4403;
+const UNKNOWN_ERROR = 4500;
 
 export class WebRtcManager {
     public microphoneConstraints?: MediaStreamConstraints["audio"];
@@ -47,12 +52,37 @@ export class WebRtcManager {
     public constructor(
         public readonly baseEndpoint: URL,
         public readonly sessionId?: string,
+        private onAuthorizationInvalid?: () => unknown,
+        private onAuthorizationExpired?: () => unknown,
     ) {
         if(baseEndpoint.protocol === "https:") { baseEndpoint.protocol = "wss:"; }
         if(baseEndpoint.protocol === "http:") { baseEndpoint.protocol = "ws:"; }
         const wsEndpoint = new URL(baseEndpoint.toString());
         wsEndpoint.pathname += "room";
         this.room = new Room(wsEndpoint.toString());
+    }
+
+    private onSfuError(error: SfuError) {
+        switch (error.code) {
+        case INVALID_AUTHORIZATION:
+            if (this.onAuthorizationInvalid) {
+                this.onAuthorizationInvalid();
+            } else {
+                console.error("INVALID_AUTHORIZATION not handled");
+            }
+            break;
+        case EXPIRED_AUTHORIZATION:
+            if (this.onAuthorizationExpired) {
+                this.onAuthorizationExpired();
+            } else {
+                console.error("EXPIRED_AUTHORIZATION not handled");
+            }
+            break;
+        case NOT_BEFORE:
+        case UNKNOWN_ERROR:
+        default:
+            console.error(JSON.stringify(error));
+        }
     }
 
     private readonly sfus = new Map<SfuId, SFU>();
@@ -62,6 +92,7 @@ export class WebRtcManager {
         if (!sfu) {
             const url = this.getSfuUrl(id);
             sfu = new SFU(id, url);
+            sfu.emitter.on("error", this.onSfuError);
             this.sfus.set(id, sfu);
         }
         return sfu;

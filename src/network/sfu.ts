@@ -1,8 +1,8 @@
-import { types as MediaSoup, Device } from "mediasoup-client";
-import { NewType } from "../types";
-import { TransportState, WSTransport } from "../network/websocketTransport";
-import { PromiseCompleter } from "../network/promiseCompleter";
-import { Memoize } from "../memoize";
+import {Device, types as MediaSoup} from "mediasoup-client";
+import {NewType} from "../types";
+import {TransportState, WSTransport} from "../network/websocketTransport";
+import {PromiseCompleter} from "../network/promiseCompleter";
+import {Memoize} from "../memoize";
 import EventEmitter from "eventemitter3";
 
 export type SfuId = NewType<string, "sfuId">
@@ -96,6 +96,7 @@ export type PauseEvent = {
 }
 
 export class SFU {
+
     public async getTrack(producerId: ProducerId) {
         const producer = this.producers.get(producerId);
         if(producer) { return producer; }
@@ -146,6 +147,7 @@ export class SFU {
     private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
     private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
+    public emitter = new EventEmitter<SfuEventMap>();
 
     private async createProducer(
         getTrack: () => Promise<MediaStreamTrack>,
@@ -276,17 +278,21 @@ export class SFU {
     }
 
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
-        const message = SFU.parse(data);
+        const message = this.parse(data);
         if (!message) {  return this.ws.disconnect(4400); }
         this.handleMessage(message).catch(e => console.error(e));
     }
 
-    private static parse(data: string | ArrayBuffer | Blob): ResponseMessage | undefined {
+    private parse(data: string | ArrayBuffer | Blob): ResponseMessage | undefined {
         if (typeof data !== "string") { return; }
         if(data.length === 0) { return {}; }
-        const response = JSON.parse(data.toString()) as ResponseMessage;
+        const response = JSON.parse(data.toString());
         if (typeof response !== "object" || !response) { return; }
-        return response;
+        if (response.error) {
+            this.emitter.emit("error", <SfuError>response);
+            return;
+        }
+        return response as ResponseMessage;
     }
 
     private async handleMessage(message: ResponseMessage) {
@@ -465,4 +471,14 @@ export type TrackEventMap = {
     pausedAtSource: (paused: boolean | undefined) => void,
     pausedGlobally: (paused: boolean | undefined) => void,
     pausedLocally: (paused: boolean | undefined) => void,
+}
+
+export class SfuError extends Error {
+    constructor (message: string, public readonly code: number) {
+        super(message);
+    }
+}
+
+export type SfuEventMap = {
+    error: (error: SfuError) => void,
 }

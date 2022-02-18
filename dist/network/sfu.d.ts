@@ -96,6 +96,7 @@ export declare class SFU {
     private readonly producerResolvers;
     private readonly producers;
     private readonly consumers;
+    emitter: EventEmitter<SfuEventMap, any>;
     private createProducer;
     private createConsumer;
     pauseGlobally(id: ProducerId, paused: boolean): Promise<void | Result>;
@@ -107,9 +108,9 @@ export declare class SFU {
     private request;
     private _requestId;
     private generateRequestId;
-    private onTransportStateChange;
+    private static onTransportStateChange;
     private onTransportMessage;
-    private static parse;
+    private parse;
     private handleMessage;
     private response;
     private closeTrack;
@@ -133,7 +134,7 @@ export declare abstract class Track {
     readonly on: EventEmitter<TrackEventMap>["on"];
     readonly off: EventEmitter<TrackEventMap>["off"];
     protected readonly emitter: EventEmitter<TrackEventMap, any>;
-    constructor(requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
+    protected constructor(requestBroadcastStateChange: (paused: boolean) => Promise<void | Result>);
 }
 export declare class Producer extends Track {
     private readonly producer;
@@ -173,6 +174,13 @@ export declare type TrackEventMap = {
     pausedAtSource: (paused: boolean | undefined) => void;
     pausedGlobally: (paused: boolean | undefined) => void;
     pausedLocally: (paused: boolean | undefined) => void;
+};
+export declare class SfuError extends Error {
+    readonly code: number;
+    constructor(message: string, code: number);
+}
+export declare type SfuEventMap = {
+    error: (error: SfuError) => void;
 };
 export {};
 //# sourceMappingURL=sfu.d.ts.map
