@@ -11,7 +11,7 @@ export class WebRtcManager {
         "microphone",
         this.sessionId,
     );
-    
+
     public cameraConstraints?: MediaStreamConstraints["video"];
     public readonly camera = new TrackSender(
         () => this.selectSfu(),
@@ -82,14 +82,14 @@ export class WebRtcManager {
 export class StreamSender {
     public async start() {
         await Promise.allSettled([
-            this.videoSender.start(), 
+            this.videoSender.start(),
             this.audioSender.start(),
         ]);
     }
 
     public async stop() {
         await Promise.allSettled([
-            this.videoSender.producer?.stop(), 
+            this.videoSender.producer?.stop(),
             this.audioSender.producer?.stop(),
         ]);
     }
@@ -113,25 +113,25 @@ export class StreamSender {
 
 
 const microphoneGetter = (
-    getAudioContraints?: () => MediaStreamConstraints["audio"]
+    getAudioConstraints?: () => MediaStreamConstraints["audio"]
 ) => () => audioTrack(
     navigator.mediaDevices.getUserMedia({
-        audio: getAudioContraints?.() || true,
+        audio: getAudioConstraints?.() || true,
     })
 );
 
 const cameraGetter = (
-    getVideoContraints?: () => MediaStreamConstraints["video"]
+    getVideoConstraints?: () => MediaStreamConstraints["video"]
 ) => () => videoTrack(
     navigator.mediaDevices.getUserMedia({
-        video: getVideoContraints?.() || true,
+        video: getVideoConstraints?.() || true,
     })
 );
 
 const screenCaptureGetter = (
-    getContraints?: () =>  DisplayMediaStreamConstraints|undefined
+    getConstraints?: () =>  DisplayMediaStreamConstraints|undefined
 ) => createCache(
-    () => navigator.mediaDevices.getDisplayMedia(getContraints?.()),
+    () => navigator.mediaDevices.getDisplayMedia(getConstraints?.()),
     s => s.getTracks().some(t => t.readyState === "ended"),
 );
 

@@ -103,7 +103,7 @@ export class SFU {
         const consumer = this.consumers.get(producerId);
         if(consumer) { return consumer; }
 
-        return await this.consumeTrack(producerId); 
+        return await this.consumeTrack(producerId);
     }
 
     public async produceTrack(
@@ -120,8 +120,7 @@ export class SFU {
         if(this.producers.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
         const consumerPromise = this.createConsumer(producerId);
         this.consumers.set(producerId, consumerPromise);
-        const consumer = await consumerPromise;
-        return consumer;
+        return await consumerPromise;
     }
 
     private readonly device = new Device();
@@ -136,14 +135,14 @@ export class SFU {
         this.ws = new WSTransport(
             url,
             (_, d) => this.onTransportMessage(d),
-            t => this.onTransportStateChange(t),
+            t => SFU.onTransportStateChange(t),
             ["live-sfu"],
             true,
             null,
         );
         this.ws.connect().catch(e => console.error(e));
     }
-    
+
     private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
     private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
@@ -154,11 +153,11 @@ export class SFU {
         sessionId?: string,
     ) {
         const producerTransport = await this.producerTransport();
-        
+
         const track = await getTrack();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
-        
+
         const mediaSoupProducer = await producerTransport.produce({
             track,
             zeroRtpOnPause: true,
@@ -175,7 +174,7 @@ export class SFU {
             (paused: boolean) => this.pauseGlobally(producer.id, paused),
         );
         const resolver = this.producerResolvers.get(producer.id);
-        if(resolver) { 
+        if(resolver) {
             this.producerResolvers.delete(producer.id);
             resolver(producer);
         } else {
@@ -226,7 +225,7 @@ export class SFU {
         if (!result) { throw new Error("Empty response from SFU"); }
         const { producerTransportCreated } = result;
         if (!producerTransportCreated) { throw new Error("Response from SFU does not contain producer transport"); }
-        
+
         const transport = this.device.createSendTransport(producerTransportCreated);
         transport.on("connect", (connectProducerTransport, callback, error) => this.request({ connectProducerTransport }).then(callback, error));
         transport.on("produce", async (produceTrack, callback, error) => {
@@ -235,7 +234,7 @@ export class SFU {
                 if(!response) { return error("No response from SFU"); }
                 const { producerCreated } = response;
                 if(!producerCreated) { return error("Empty response from SFU"); }
-                const id = producerCreated.producerId; 
+                const id = producerCreated.producerId;
                 if(!id) { return error("Malformed response from SFU"); }
                 const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
                 this.producers.set(id, producerPromise);
@@ -272,7 +271,7 @@ export class SFU {
     private _requestId = 0;
     private generateRequestId() { return `${this._requestId++}` as RequestId; }
 
-    private onTransportStateChange(state: TransportState) {
+    private static onTransportStateChange(state: TransportState) {
         console.info(`Transport state changed to ${state}`);
     }
 
@@ -294,11 +293,11 @@ export class SFU {
         try {
             if (message.response) { this.response(message.response); }
 
-            if (message.pausedSource) { this.onSourcePaused(message.pausedSource); }
-            if (message.pausedGlobally) { this.onGloballyPaused(message.pausedGlobally); }
+            if (message.pausedSource) { await this.onSourcePaused(message.pausedSource); }
+            if (message.pausedGlobally) { await this.onGloballyPaused(message.pausedGlobally); }
 
-            if (message.consumerClosed) { this.closeTrack(message.consumerClosed); }
-            if (message.producerClosed) { this.closeTrack(message.producerClosed); }
+            if (message.consumerClosed) { await this.closeTrack(message.consumerClosed); }
+            if (message.producerClosed) { await this.closeTrack(message.producerClosed); }
         } catch(e) {
             console.warn(e);
         }
@@ -316,12 +315,12 @@ export class SFU {
     private async closeTrack(producerId: ProducerId) {
         (await this.producers.get(producerId))?.close();
         this.producers.delete(producerId);
-        
+
         (await this.consumers.get(producerId))?.close();
         this.consumers.delete(producerId);
     }
 
-    private async onSourcePaused({ producerId, paused }: PauseEvent) { 
+    private async onSourcePaused({ producerId, paused }: PauseEvent) {
         const consumer = await this.consumers.get(producerId);
         if(consumer) { consumer.pausedAtSource = paused; }
     }
@@ -330,7 +329,7 @@ export class SFU {
         const producer = await this.producers.get(producerId);
         console.log(`Producer(${producer?.id}): Global pause (${producerId},${paused})`);
         if(producer) { producer.pausedGlobally = paused; }
-        
+
         const consumer = await this.consumers.get(producerId);
         if(consumer) { consumer.pausedGlobally = paused; }
     }
@@ -362,7 +361,7 @@ export abstract class Track {
     public readonly off: EventEmitter<TrackEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
     protected readonly emitter = new EventEmitter<TrackEventMap>();
 
-    public constructor(
+    protected constructor(
         public readonly requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>
     ) { }
 }
@@ -424,7 +423,7 @@ export class Consumer extends Track {
     public get track() { return this.consumer.track; }
     public override get isMine() { return false; }
     public override get pausedLocally() { return this.consumer.paused; }
-    
+
     protected _pausedAtSource?: boolean;
     public get pausedAtSource() { return this._pausedAtSource; }
     public set pausedAtSource(paused: boolean | undefined) {
@@ -463,7 +462,6 @@ export class Consumer extends Track {
 
 export type TrackEventMap = {
     close: () => void,
-    
     pausedAtSource: (paused: boolean | undefined) => void,
     pausedGlobally: (paused: boolean | undefined) => void,
     pausedLocally: (paused: boolean | undefined) => void,

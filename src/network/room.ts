@@ -11,7 +11,7 @@ export type TrackInfo = TrackLocation & {
     name?: string,
     sessionId?: string,
 };
-const trackInfoEquals = (a: TrackInfo, b: TrackInfo) => 
+const trackInfoEquals = (a: TrackInfo, b: TrackInfo) =>
     trackLocationEquals(a,b)
     && (a.name === b.name)
     && (a.sessionId === b.sessionId);
@@ -74,9 +74,9 @@ export class Room {
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
         if (typeof data !== "string") { return; }
         if(data.length === 0) { return; }
-        const events = JSON.parse(data) as TrackInfoEvent[];
+        const events = JSON.parse(data);
         if (typeof events !== "object" || !(events instanceof Array)) { return; }
-        for(const event of events) { this.handleMessage(event); }
+        for(const event of <TrackInfoEvent[]>events) { this.handleMessage(event); }
     }
 
     private handleMessage(e: TrackInfoEvent) {
@@ -128,5 +128,5 @@ export class Room {
 export type RoomEventMap = {
     tracksUpdated: (tracks: Map<ProducerId,TrackInfo>) => void;
     disconnected: () => void;
-    sfuId: (sfuId: SfuId) => void; 
+    sfuId: (sfuId: SfuId) => void;
 }

@@ -78,13 +78,13 @@ export class WSTransport {
     }
 
     private onMessage(data: string | ArrayBuffer | Blob) {
-        this.resetNetworkRecieveTimeout();
+        this.resetNetworkReceiveTimeout();
         this.onMessageCallback(this, data);
     }
 
     private onOpen() {
         this.resetNetworkSendTimeout();
-        this.resetNetworkRecieveTimeout();
+        this.resetNetworkReceiveTimeout();
         this.onStateChange?.("connected");
     }
 
@@ -98,7 +98,7 @@ export class WSTransport {
         this.onStateChange?.("error");
     }
 
-    private resetNetworkRecieveTimeout(): void {
+    private resetNetworkReceiveTimeout(): void {
         if(this.receiveMessageTimeoutTime === null) { return; }
         if (this.receiveTimeoutReference) {
             clearTimeout(this.receiveTimeoutReference);
