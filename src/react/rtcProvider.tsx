@@ -6,6 +6,8 @@ export interface WebRtcProviderProps {
     sessionId?: string;
     onAuthorizationInvalid?: () => unknown;
     onAuthorizationExpired?: () => unknown;
+    onAuthenticationInvalid?: () => unknown;
+    onAuthenticationExpired?: () => unknown;
 }
 
 export function WebRtcProvider({
@@ -14,8 +16,10 @@ export function WebRtcProvider({
     sessionId,
     onAuthorizationInvalid,
     onAuthorizationExpired,
+    onAuthenticationInvalid,
+    onAuthenticationExpired,
 }: WebRtcProviderProps) {
-    const value = useMemo(() => new WebRtcManager(endpoint, sessionId, onAuthorizationInvalid, onAuthorizationExpired), []);
+    const value = useMemo(() => new WebRtcManager(endpoint, sessionId, onAuthorizationInvalid, onAuthorizationExpired, onAuthenticationInvalid, onAuthenticationExpired), []);
     return (
         <WebRtcContext.Provider value={value}>
             {children}

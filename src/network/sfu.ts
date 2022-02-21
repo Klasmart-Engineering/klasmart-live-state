@@ -473,11 +473,11 @@ export type TrackEventMap = {
     pausedLocally: (paused: boolean | undefined) => void,
 }
 
-export class SfuError extends Error {
-    constructor (message: string, public readonly code: number) {
-        super(message);
-    }
-}
+export type SfuError = {
+    name: "AuthenticationError" | "AuthorizationError";
+    error: Error;
+    code: number;
+};
 
 export type SfuEventMap = {
     error: (error: SfuError) => void,

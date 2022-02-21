@@ -3,8 +3,8 @@ import { TrackSender } from "../network/trackSender";
 import { SFU, SfuId, SfuError } from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
 
-const INVALID_AUTHORIZATION = 4400;
-const EXPIRED_AUTHORIZATION = 4401;
+const INVALID = 4400;
+const EXPIRED = 4401;
 const NOT_BEFORE = 4403;
 const UNKNOWN_ERROR = 4500;
 
@@ -54,6 +54,8 @@ export class WebRtcManager {
         public readonly sessionId?: string,
         private onAuthorizationInvalid?: () => unknown,
         private onAuthorizationExpired?: () => unknown,
+        private onAuthenticationExpired?: () => unknown,
+        private onAuthenticationInvalid?: () => unknown,
     ) {
         if(baseEndpoint.protocol === "https:") { baseEndpoint.protocol = "wss:"; }
         if(baseEndpoint.protocol === "http:") { baseEndpoint.protocol = "ws:"; }
@@ -63,25 +65,51 @@ export class WebRtcManager {
     }
 
     private onSfuError(error: SfuError) {
-        switch (error.code) {
-        case INVALID_AUTHORIZATION:
-            if (this.onAuthorizationInvalid) {
-                this.onAuthorizationInvalid();
-            } else {
-                console.error("INVALID_AUTHORIZATION not handled");
+        switch (error.name) {
+        case "AuthenticationError":
+            switch (error.code){
+            case INVALID:
+                if (this.onAuthenticationInvalid) {
+                    this.onAuthenticationInvalid();
+                } else {
+                    console.error("INVALID_AUTHENTICATION not handled");
+                }
+                break;
+            case EXPIRED:
+                if (this.onAuthenticationExpired) {
+                    this.onAuthenticationExpired();
+                } else {
+                    console.error("EXPIRED_AUTHENTICATION not handled");
+                }
+                break;
+            case NOT_BEFORE:
+            case UNKNOWN_ERROR:
+            default:
+                console.error(JSON.stringify(error));
             }
             break;
-        case EXPIRED_AUTHORIZATION:
-            if (this.onAuthorizationExpired) {
-                this.onAuthorizationExpired();
-            } else {
-                console.error("EXPIRED_AUTHORIZATION not handled");
+        case "AuthorizationError":
+            switch (error.code){
+            case INVALID:
+                if (this.onAuthorizationInvalid) {
+                    this.onAuthorizationInvalid();
+                } else {
+                    console.error("INVALID_AUTHORIZATION not handled");
+                }
+                break;
+            case EXPIRED:
+                if (this.onAuthorizationExpired) {
+                    this.onAuthorizationExpired();
+                } else {
+                    console.error("EXPIRED_AUTHORIZATION not handled");
+                }
+                break;
+            case NOT_BEFORE:
+            case UNKNOWN_ERROR:
+            default:
+                console.error(JSON.stringify(error));
             }
             break;
-        case NOT_BEFORE:
-        case UNKNOWN_ERROR:
-        default:
-            console.error(JSON.stringify(error));
         }
     }
 

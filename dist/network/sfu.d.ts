@@ -175,10 +175,11 @@ export declare type TrackEventMap = {
     pausedGlobally: (paused: boolean | undefined) => void;
     pausedLocally: (paused: boolean | undefined) => void;
 };
-export declare class SfuError extends Error {
-    readonly code: number;
-    constructor(message: string, code: number);
-}
+export declare type SfuError = {
+    name: "AuthenticationError" | "AuthorizationError";
+    error: Error;
+    code: number;
+};
 export declare type SfuEventMap = {
     error: (error: SfuError) => void;
 };

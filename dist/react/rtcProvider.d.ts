@@ -5,6 +5,8 @@ export interface WebRtcProviderProps {
     sessionId?: string;
     onAuthorizationInvalid?: () => unknown;
     onAuthorizationExpired?: () => unknown;
+    onAuthenticationInvalid?: () => unknown;
+    onAuthenticationExpired?: () => unknown;
 }
-export declare function WebRtcProvider({ children, endpoint, sessionId, onAuthorizationInvalid, onAuthorizationExpired, }: WebRtcProviderProps): JSX.Element;
+export declare function WebRtcProvider({ children, endpoint, sessionId, onAuthorizationInvalid, onAuthorizationExpired, onAuthenticationInvalid, onAuthenticationExpired, }: WebRtcProviderProps): JSX.Element;
 //# sourceMappingURL=rtcProvider.d.ts.map

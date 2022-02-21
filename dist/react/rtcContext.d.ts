@@ -7,6 +7,8 @@ export declare class WebRtcManager {
     readonly sessionId?: string | undefined;
     private onAuthorizationInvalid?;
     private onAuthorizationExpired?;
+    private onAuthenticationExpired?;
+    private onAuthenticationInvalid?;
     microphoneConstraints?: MediaStreamConstraints["audio"];
     readonly microphone: TrackSender;
     cameraConstraints?: MediaStreamConstraints["video"];
@@ -17,7 +19,7 @@ export declare class WebRtcManager {
     pauseForEveryone({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     pause({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     readonly room: Room;
-    constructor(baseEndpoint: URL, sessionId?: string | undefined, onAuthorizationInvalid?: (() => unknown) | undefined, onAuthorizationExpired?: (() => unknown) | undefined);
+    constructor(baseEndpoint: URL, sessionId?: string | undefined, onAuthorizationInvalid?: (() => unknown) | undefined, onAuthorizationExpired?: (() => unknown) | undefined, onAuthenticationExpired?: (() => unknown) | undefined, onAuthenticationInvalid?: (() => unknown) | undefined);
     private onSfuError;
     private readonly sfus;
     private sfu;
