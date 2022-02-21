@@ -77,14 +77,17 @@ const useStreamSender = (
 const useTrackSender = (
     trackSender: TrackSender,
 ) => {
-    console.log("useTrackSender", trackSender);
+    const rerender = useRerender();
+    useEffect(() => {
+        trackSender.on("producer", rerender);
+        return () => { trackSender.off("producer", rerender); };
+    }, [trackSender, rerender]);
+
     return {
         ...useTrackState(trackSender.producer),
-        // paused: useTrackPauseState(trackSender.producer),
         stream: useMediaStreamTracks(trackSender.producer?.track),
         start: useAsyncCallback(() => trackSender.start()),
         stop: useAsyncCallback(() => trackSender.producer?.stop()),
-        location: trackSender.location,
         globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
     };
 };

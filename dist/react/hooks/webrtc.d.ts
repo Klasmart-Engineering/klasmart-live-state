@@ -9,10 +9,6 @@ export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) =>
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
-    location: {
-        sfuId: import("../../network/sfu").SfuId;
-        producerId: import("../../network/sfu").ProducerId;
-    } | undefined;
     globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
@@ -23,10 +19,6 @@ export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager
     stream: MediaStream | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
-    location: {
-        sfuId: import("../../network/sfu").SfuId;
-        producerId: import("../../network/sfu").ProducerId;
-    } | undefined;
     globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;

@@ -1,17 +1,11 @@
 import { Producer, SFU } from "./sfu";
+import {EventEmitter} from "eventemitter3";
 
 export class TrackSender {
+    public on: TrackSender["emitter"]["on"] = (event, callback) => this.emitter.on(event, callback);
+    public off: TrackSender["emitter"]["off"] = (event, callback) => this.emitter.off(event, callback);
+    public once: TrackSender["emitter"]["once"] = (event, callback) => this.emitter.once(event, callback);
 
-    //TODO: Remove
-    public get location() {
-        if(!this._producer) { return; }
-        if(!this._sfu) { return; }
-        return {
-            sfuId: this._sfu.id,
-            producerId: this._producer.id,
-        };
-    }
-    
     public get producer() { return this._producer; }
     public async start() {
         //TODO: Check for race conditions
@@ -22,6 +16,7 @@ export class TrackSender {
             this.name,
             this.sessionId,
         );
+        this.emitter.emit("producer");
     }
 
     public constructor (
@@ -33,5 +28,8 @@ export class TrackSender {
 
     private _producer?: Producer;
     private _sfu?: SFU;
+    private emitter = new EventEmitter<{
+        producer: []
+    }>();
 }
 
