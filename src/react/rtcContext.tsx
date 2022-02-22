@@ -1,12 +1,8 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
-import { SFU, SfuId, SfuError } from "../network/sfu";
+import { SFU, SfuId, SfuAuthErrors } from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
 
-const INVALID = 4400;
-const EXPIRED = 4401;
-const NOT_BEFORE = 4403;
-const UNKNOWN_ERROR = 4500;
 
 export class WebRtcManager {
     public microphoneConstraints?: MediaStreamConstraints["audio"];
@@ -56,6 +52,9 @@ export class WebRtcManager {
         private onAuthorizationExpired?: () => unknown,
         private onAuthenticationExpired?: () => unknown,
         private onAuthenticationInvalid?: () => unknown,
+        private onTokenMismatch?: () => unknown,
+        private onMissingAuthenticationToken?: () => unknown,
+        private onMissingAuthorizationToken?: () => unknown
     ) {
         if(baseEndpoint.protocol === "https:") { baseEndpoint.protocol = "wss:"; }
         if(baseEndpoint.protocol === "http:") { baseEndpoint.protocol = "ws:"; }
@@ -64,52 +63,82 @@ export class WebRtcManager {
         this.room = new Room(wsEndpoint.toString());
     }
 
-    private onSfuError(error: SfuError) {
+    private onSfuError(error: SfuAuthErrors) {
+        enum SfuAuthErrorCodes {
+            INVALID = 4400,
+            EXPIRED = 4401,
+            NOT_BEFORE = 4403,
+            UNKNOWN_ERROR = 4500
+        }
+
         switch (error.name) {
         case "AuthenticationError":
             switch (error.code){
-            case INVALID:
+            case SfuAuthErrorCodes.INVALID:
                 if (this.onAuthenticationInvalid) {
                     this.onAuthenticationInvalid();
                 } else {
                     console.error("INVALID_AUTHENTICATION not handled");
                 }
                 break;
-            case EXPIRED:
+            case SfuAuthErrorCodes.EXPIRED:
                 if (this.onAuthenticationExpired) {
                     this.onAuthenticationExpired();
                 } else {
                     console.error("EXPIRED_AUTHENTICATION not handled");
                 }
                 break;
-            case NOT_BEFORE:
-            case UNKNOWN_ERROR:
+            case SfuAuthErrorCodes.NOT_BEFORE:
+            case SfuAuthErrorCodes.UNKNOWN_ERROR:
             default:
                 console.error(JSON.stringify(error));
             }
             break;
         case "AuthorizationError":
             switch (error.code){
-            case INVALID:
+            case SfuAuthErrorCodes.INVALID:
                 if (this.onAuthorizationInvalid) {
                     this.onAuthorizationInvalid();
                 } else {
                     console.error("INVALID_AUTHORIZATION not handled");
                 }
                 break;
-            case EXPIRED:
+            case SfuAuthErrorCodes.EXPIRED:
                 if (this.onAuthorizationExpired) {
                     this.onAuthorizationExpired();
                 } else {
                     console.error("EXPIRED_AUTHORIZATION not handled");
                 }
                 break;
-            case NOT_BEFORE:
-            case UNKNOWN_ERROR:
+            case SfuAuthErrorCodes.NOT_BEFORE:
+            case SfuAuthErrorCodes.UNKNOWN_ERROR:
             default:
                 console.error(JSON.stringify(error));
             }
             break;
+        case "TokenMismatchError":
+            if (this.onTokenMismatch) {
+                this.onTokenMismatch();
+            } else {
+                console.error("TOKEN_MISMATCH not handled");
+            }
+            break;
+        case "MissingAuthenticationError":
+            if (this.onMissingAuthenticationToken) {
+                this.onMissingAuthenticationToken();
+            } else {
+                console.error("MISSING_AUTHENTICATION_ERROR not handled");
+            }
+            break;
+        case "MissingAuthorizationError":
+            if (this.onMissingAuthorizationToken) {
+                this.onMissingAuthorizationToken();
+            } else {
+                console.error("MISSING_AUTHORIZATION_ERROR not handled");
+            }
+            break;
+        default:
+            console.error(JSON.stringify(error));
         }
     }
 

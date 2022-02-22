@@ -8,6 +8,9 @@ export interface WebRtcProviderProps {
     onAuthorizationExpired?: () => unknown;
     onAuthenticationInvalid?: () => unknown;
     onAuthenticationExpired?: () => unknown;
+    onTokenMismatch?: () => unknown;
+    onMissingAuthenticationToken?: () => unknown;
+    onMissingAuthorizationToken?: () => unknown;
 }
 
 export function WebRtcProvider({
@@ -18,8 +21,20 @@ export function WebRtcProvider({
     onAuthorizationExpired,
     onAuthenticationInvalid,
     onAuthenticationExpired,
+    onTokenMismatch,
+    onMissingAuthenticationToken,
+    onMissingAuthorizationToken,
 }: WebRtcProviderProps) {
-    const value = useMemo(() => new WebRtcManager(endpoint, sessionId, onAuthorizationInvalid, onAuthorizationExpired, onAuthenticationInvalid, onAuthenticationExpired), []);
+    const value = useMemo(() => new WebRtcManager(
+        endpoint,
+        sessionId,
+        onAuthorizationInvalid,
+        onAuthorizationExpired,
+        onAuthenticationInvalid,
+        onAuthenticationExpired,
+        onTokenMismatch,
+        onMissingAuthenticationToken,
+        onMissingAuthorizationToken), []);
     return (
         <WebRtcContext.Provider value={value}>
             {children}

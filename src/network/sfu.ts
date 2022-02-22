@@ -288,8 +288,8 @@ export class SFU {
         if(data.length === 0) { return {}; }
         const response = JSON.parse(data.toString());
         if (typeof response !== "object" || !response) { return; }
-        if (response.error) {
-            this.emitter.emit("error", <SfuError>response);
+        if (response.code !== undefined && response.name !== undefined && response.message !== undefined) {
+            this.emitter.emit("error", <SfuAuthErrors>response);
             return;
         }
         return response as ResponseMessage;
@@ -473,12 +473,32 @@ export type TrackEventMap = {
     pausedLocally: (paused: boolean | undefined) => void,
 }
 
-export type SfuError = {
-    name: "AuthenticationError" | "AuthorizationError";
-    error: Error;
+type SfuAuthError = Error & {
     code: number;
+}
+
+export type AuthenticationError = SfuAuthError & {
+    name: "AuthenticationError";
 };
 
+export type AuthorizationError = SfuAuthError & {
+    name: "AuthorizationError";
+};
+
+export type TokenMismatchError = SfuAuthError & {
+    name: "TokenMismatchError";
+};
+
+export type MissingAuthenticationError = SfuAuthError & {
+    name: "MissingAuthenticationError";
+};
+
+export type MissingAuthorizationError = SfuAuthError & {
+    name: "MissingAuthorizationError";
+};
+
+export type SfuAuthErrors = AuthenticationError | AuthorizationError | TokenMismatchError | MissingAuthenticationError | MissingAuthorizationError;
+
 export type SfuEventMap = {
-    error: (error: SfuError) => void,
+    error: (error: SfuAuthErrors) => void,
 }

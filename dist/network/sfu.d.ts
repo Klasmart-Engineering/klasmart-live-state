@@ -175,13 +175,27 @@ export declare type TrackEventMap = {
     pausedGlobally: (paused: boolean | undefined) => void;
     pausedLocally: (paused: boolean | undefined) => void;
 };
-export declare type SfuError = {
-    name: "AuthenticationError" | "AuthorizationError";
-    error: Error;
+declare type SfuAuthError = Error & {
     code: number;
 };
+export declare type AuthenticationError = SfuAuthError & {
+    name: "AuthenticationError";
+};
+export declare type AuthorizationError = SfuAuthError & {
+    name: "AuthorizationError";
+};
+export declare type TokenMismatchError = SfuAuthError & {
+    name: "TokenMismatchError";
+};
+export declare type MissingAuthenticationError = SfuAuthError & {
+    name: "MissingAuthenticationError";
+};
+export declare type MissingAuthorizationError = SfuAuthError & {
+    name: "MissingAuthorizationError";
+};
+export declare type SfuAuthErrors = AuthenticationError | AuthorizationError | TokenMismatchError | MissingAuthenticationError | MissingAuthorizationError;
 export declare type SfuEventMap = {
-    error: (error: SfuError) => void;
+    error: (error: SfuAuthErrors) => void;
 };
 export {};
 //# sourceMappingURL=sfu.d.ts.map
