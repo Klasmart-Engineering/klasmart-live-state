@@ -149,7 +149,7 @@ export class WebRtcManager {
         if (!sfu) {
             const url = this.getSfuUrl(id);
             sfu = new SFU(id, url);
-            sfu.emitter.on("error", this.onSfuError);
+            sfu.emitter.on("error", (err) => this.onSfuError(err));
             this.sfus.set(id, sfu);
         }
         return sfu;
