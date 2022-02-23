@@ -64,6 +64,7 @@ export class WebRtcManager {
     }
 
     private onSfuError(error: SfuAuthErrors) {
+        console.error(error.name);
         enum SfuAuthErrorCodes {
             INVALID = 4400,
             EXPIRED = 4401,
