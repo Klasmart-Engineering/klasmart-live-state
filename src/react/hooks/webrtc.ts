@@ -1,9 +1,9 @@
-import { useContext, useEffect, useMemo, useReducer } from "react";
+import { useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
 import { Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
-import { StreamSender, WebRtcContext } from "../rtcContext";
+import { StreamSender, WebRtcContext, WebRtcManager } from "../rtcContext";
 
 export const useWebRtcConstraints = (
     ctx = useContext(WebRtcContext)
@@ -18,21 +18,54 @@ export const useWebRtcConstraints = (
         setMicrophoneConstraints: (
             constraints?: MediaStreamConstraints["video"]
         ) => ctx.microphoneConstraints = constraints,
+
+        getScreenshareConstraints: () => ctx.screenshareConstraints,
+        setScreenshareConstraints: (
+            constraints?: DisplayMediaStreamConstraints
+        ) => ctx.screenshareConstraints = constraints,
     };
 };
 
 export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.camera);
 export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone);
-export const useScreenshare = (ctx = useContext(WebRtcContext)) => useStreamSender(ctx.screenshare);
+export const useScreenshare = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.screenshare);
 
-export const useSessionTrackInfoList = (sessionId: string, ctx = useContext(WebRtcContext)) => {
-    const rerender = useRerender();
+export type StreamNamePair = { audio: string, video: string }
+export function useStream(sessionId: string, name?: string | StreamNamePair, ctx = useContext(WebRtcContext)) {
+    const audioName = typeof name === "string" ? `${name}-audio` : name?.audio ?? "microphone";
+    const videoName = typeof name === "string" ? `${name}-video` : name?.video ?? "camera";
+
+    const getTracks = useCallback(
+        () => {
+            const tracks = ctx.room.getSessionTracks(sessionId);
+            return {
+                audioLocation: tracks.find(t => t.name === audioName),
+                videoLocation: tracks.find(t => t.name === videoName),
+            };
+        },
+        [ctx, sessionId, audioName, videoName], 
+    );
+    const [{audioLocation, videoLocation}, setLocations] = useState(getTracks);
     useEffect(() => {
-        ctx.room.on("tracksUpdated", rerender);
-        return () => { ctx.room.off("tracksUpdated", rerender); };
-    });
-    return ctx.room.getSessionTracks(sessionId);
-};
+        const onUpdate = () => setLocations(getTracks);
+        ctx.room.on("tracksUpdated", onUpdate);
+        return () => { ctx.room.off("tracksUpdated", onUpdate); };
+    }, [setLocations, getTracks, ctx.room]);
+
+    const audio = useTrack(audioLocation);
+    const video = useTrack(videoLocation);
+
+    const stream = useMediaStreamTracks(
+        audio.track?.track,
+        video.track?.track,
+    );
+    return {
+        audio,
+        video,
+        stream,
+    };
+}
+
 
 export const useTrack = (
     location?: TrackLocation,
@@ -49,7 +82,6 @@ export const useTrack = (
         track,
         hasLocation: Boolean(location),
         ...useTrackState(track),
-        stream: useMediaStreamTracks(track?.track),
         kind: track?.kind,
         isMine: track?.isMine,
         start,
@@ -85,7 +117,7 @@ const useTrackSender = (
 
     return {
         ...useTrackState(trackSender.producer),
-        stream: useMediaStreamTracks(trackSender.producer?.track),
+        track: trackSender.producer?.track,
         start: useAsyncCallback(() => trackSender.start()),
         stop: useAsyncCallback(() => trackSender.producer?.stop()),
         globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
@@ -150,14 +182,22 @@ const useTrackPauseState = (
 };
 
 export const useMediaStreamTracks = (
-    ...tracks: Array<MediaStreamTrack | null | undefined>
-) => useMemo(() => {
-    const validTracks = filterFalsy(tracks);
-    if(validTracks.length <= 0) {return;}
-    return new MediaStream(validTracks);
-}, tracks);
+    ...nextTrackSet: Array<MediaStreamTrack | null | undefined>
+) => {
+    const stream = useMemo(() => new MediaStream(), []);
+    const previousTrackSet = new Set(stream.getAudioTracks());
+    
+    for(const track of nextTrackSet) {
+        if(!track) { continue; }
+        const isNewTrack = !previousTrackSet.delete(track);
+        if(isNewTrack) { stream.addTrack(track); }
+    }
+
+    for(const track of previousTrackSet) {
+        stream.removeTrack(track);
+    }
+
+    return stream;
+};
 
 const useRerender = () => useReducer(i => i + 1, 0)[1];
-
-const filterFalsy = <T extends object>(items: Array<T|undefined|null>) => 
-    items.filter((x): x is T => Boolean(x));

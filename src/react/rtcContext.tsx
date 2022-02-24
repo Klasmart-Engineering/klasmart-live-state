@@ -21,10 +21,12 @@ export class WebRtcManager {
         this.sessionId,
     );
 
-    public screenCaptureConstraints?: DisplayMediaStreamConstraints;
-    public readonly screenshare = new StreamSender(
+    public screenshareConstraints?: DisplayMediaStreamConstraints;
+    public readonly screenshare = new TrackSender(
         () => this.selectSfu(),
-        screenCaptureGetter(() => this.screenCaptureConstraints),
+        screenshareGetter(() => this.screenshareConstraints),
+        "screenshare-video",
+        this.sessionId,
     );
 
     public async getTrack({sfuId, producerId}: TrackLocation) {
@@ -170,14 +172,14 @@ export class WebRtcManager {
 
 export class StreamSender {
     public async start() {
-        await Promise.allSettled([
+        await Promise.all([
             this.videoSender.start(),
             this.audioSender.start(),
         ]);
     }
 
     public async stop() {
-        await Promise.allSettled([
+        await Promise.all([
             this.videoSender.producer?.stop(),
             this.audioSender.producer?.stop(),
         ]);
@@ -186,18 +188,29 @@ export class StreamSender {
     public readonly videoSender = new TrackSender(
         this.getSfu,
         () => videoTrack(this.getStream()),
-        "screenshare",
+        `${this.name}-video`,
+        this.sessionId,
     );
+
     public readonly audioSender = new TrackSender(
         this.getSfu,
         () => audioTrack(this.getStream()),
-        "screenshare",
+        `${this.name}-audio`,
+        this.sessionId,
     );
 
+    private readonly getStream: () => Promise<MediaStream>;
     public constructor(
         private readonly getSfu: () => Promise<SFU>,
-        private readonly getStream: () => Promise<MediaStream>,
-    ) {}
+        getStream: () => Promise<MediaStream>,
+        private readonly name: string,
+        private readonly sessionId?: string | undefined,
+    ) {
+        this.getStream = createCache(
+            getStream,
+            s => s.getTracks().some(t => t.readyState === "ended"),
+        );
+    }
 }
 
 
@@ -217,21 +230,20 @@ const cameraGetter = (
     })
 );
 
-const screenCaptureGetter = (
+const screenshareGetter = (
     getConstraints?: () =>  DisplayMediaStreamConstraints|undefined
-) => createCache(
-    () => navigator.mediaDevices.getDisplayMedia(getConstraints?.()),
-    s => s.getTracks().some(t => t.readyState === "ended"),
+) => () => videoTrack(
+    navigator.mediaDevices.getDisplayMedia(getConstraints?.())
 );
 
-const audioTrack = async (stream: Promise<MediaStream>) => firstTrack((await stream).getAudioTracks());
-const videoTrack = async (stream: Promise<MediaStream>) => firstTrack((await stream).getVideoTracks());
-function firstTrack(tracks: MediaStreamTrack[]) {
+export const audioTrack = async (stream: Promise<MediaStream>) => firstTrack((await stream).getAudioTracks());
+export const videoTrack = async (stream: Promise<MediaStream>) => firstTrack((await stream).getVideoTracks());
+export const firstTrack = (tracks: MediaStreamTrack[]) => {
     const track = tracks[0];
     if(!track) { throw new Error("Could not get media track"); }
     if(tracks.length > 1) { console.info(`Got ${tracks.length} media tracks, can only use 1`); }
     return track;
-}
+};
 
 function createCache<T>(initializeCache: {():Promise<T>|T}, checkValidity?:{(value: T):boolean}): {():Promise<T>} {
     let cache: {value: Promise<T>|T}|undefined;

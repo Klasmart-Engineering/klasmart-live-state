@@ -16,8 +16,8 @@ export declare class WebRtcManager {
     readonly microphone: TrackSender;
     cameraConstraints?: MediaStreamConstraints["video"];
     readonly camera: TrackSender;
-    screenCaptureConstraints?: DisplayMediaStreamConstraints;
-    readonly screenshare: StreamSender;
+    screenshareConstraints?: DisplayMediaStreamConstraints;
+    readonly screenshare: TrackSender;
     getTrack({ sfuId, producerId }: TrackLocation): Promise<import("../network/sfu").Producer | import("../network/sfu").Consumer>;
     pauseForEveryone({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     pause({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
@@ -31,12 +31,17 @@ export declare class WebRtcManager {
 }
 export declare class StreamSender {
     private readonly getSfu;
-    private readonly getStream;
+    private readonly name;
+    private readonly sessionId?;
     start(): Promise<void>;
     stop(): Promise<void>;
     readonly videoSender: TrackSender;
     readonly audioSender: TrackSender;
-    constructor(getSfu: () => Promise<SFU>, getStream: () => Promise<MediaStream>);
+    private readonly getStream;
+    constructor(getSfu: () => Promise<SFU>, getStream: () => Promise<MediaStream>, name: string, sessionId?: string | undefined);
 }
+export declare const audioTrack: (stream: Promise<MediaStream>) => Promise<MediaStreamTrack>;
+export declare const videoTrack: (stream: Promise<MediaStream>) => Promise<MediaStreamTrack>;
+export declare const firstTrack: (tracks: MediaStreamTrack[]) => MediaStreamTrack;
 export declare const WebRtcContext: React.Context<WebRtcManager>;
 //# sourceMappingURL=rtcContext.d.ts.map
