@@ -38,9 +38,9 @@ export class Room {
         return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId?.get(id) || []);
     }
 
-    public async getSfuId() {
-        if(this._sfuId) {return this._sfuId;}
-        this.ws.connect().catch((e) =>  console.error(e));
+    public async getSfuId(useCache = true) {
+        if(this._sfuIdCache && useCache) {return this._sfuIdCache;}
+        this.ws.send(JSON.stringify({request: "sfuId"}));
         return await new Promise<SfuId>(resolve => this.once("sfuId", id => resolve(id)));
     }
 
@@ -62,7 +62,7 @@ export class Room {
     private readonly emitter = new EventEmitter<RoomEventMap>();
     private sessionMap = new Map<string, Set<ProducerId>>();
     private trackInfoByProducerId?: Map<ProducerId,TrackInfo>;
-    private _sfuId?: SfuId;
+    private _sfuIdCache?: SfuId;
 
     private onTransportStateChange(state: TransportState) {
         switch(state) {
@@ -120,7 +120,7 @@ export class Room {
     }
 
     private setSfuId(id: SfuId) {
-        this._sfuId = id;
+        this._sfuIdCache = id;
         this.emitter.emit("sfuId", id);
     }
 }
