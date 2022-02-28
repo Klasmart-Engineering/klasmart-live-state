@@ -3,7 +3,7 @@ import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
 import { Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
-import { StreamSender, WebRtcContext, WebRtcManager } from "../rtcContext";
+import { WebRtcContext } from "../rtcContext";
 
 export const useWebRtcConstraints = (
     ctx = useContext(WebRtcContext)
@@ -93,19 +93,6 @@ export const useTrack = (
 
 export type Track = ReturnType<typeof useTrack>;
 
-const useStreamSender = (
-    streamSender: StreamSender,
-) => ({
-    start: useAsyncCallback(() => streamSender.start()),
-    stop: useAsyncCallback(() => streamSender.stop()),
-    videoPaused: useTrackPauseState(streamSender.videoSender.producer),
-    audioPaused: useTrackPauseState(streamSender.audioSender.producer),
-    stream: useMediaStreamTracks(
-        streamSender.audioSender.producer?.track,
-        streamSender.videoSender.producer?.track,
-    ),
-});
-
 const useTrackSender = (
     trackSender: TrackSender,
 ) => {
@@ -150,34 +137,6 @@ const useTrackState = (
         isPausedLocally: track?.pausedLocally !== false,
         isPausedGlobally: track?.pausedGlobally !== false,
         isPausedAtSource: track?.pausedAtSource !== false,
-    };
-};
-
-const useTrackPauseState = (
-    track?: SfuTrack,
-) => {
-    const _rerender = useRerender();
-    const rerender = (e: any) => {
-        console.log(`Rerender track(${track?.track?.id})`, e);
-        _rerender();
-    };
-    
-    useEffect(() => {
-        if(!track) { return; }
-        track.on("pausedAtSource", rerender);
-        track.on("pausedGlobally", rerender);
-        track.on("pausedLocally", rerender);
-        return () => {
-            track.off("pausedAtSource", rerender);
-            track.off("pausedGlobally", rerender);
-            track.off("pausedLocally", rerender);
-        };
-    });
-
-    return {
-        atSource: track?.pausedAtSource,
-        globally: track?.pausedGlobally,
-        locally: track?.pausedLocally,
     };
 };
 
