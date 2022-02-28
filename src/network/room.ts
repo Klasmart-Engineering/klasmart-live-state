@@ -28,6 +28,8 @@ export class Room {
     public readonly on: Room["emitter"]["on"] = (event, listener) => this.emitter.on(event, listener);
     public readonly off: Room["emitter"]["off"] = (event, listener) => this.emitter.off(event, listener);
     public readonly once: Room["emitter"]["once"] = (event, listener) => this.emitter.once(event, listener);
+    // The sfu on which the client will attempt to place their tracks.
+    private _producerSfuId?: SfuId;
 
     public tracks() { return [...(this.trackInfoByProducerId ?? []).values()]; }
 
@@ -38,10 +40,16 @@ export class Room {
         return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId?.get(id) || []);
     }
 
-    public async getSfuId(useCache = true) {
-        if(this._sfuIdCache && useCache) {return this._sfuIdCache;}
-        this.ws.send(JSON.stringify({request: "sfuId"}));
-        return await new Promise<SfuId>(resolve => this.once("sfuId", id => resolve(id)));
+    public async getSfuIds() {
+        return this.tracks().map(t => t.sfuId);
+    }
+
+    public async getProducerSfuId(excludeId?: SfuId) {
+        if(this._producerSfuId && excludeId !== this._producerSfuId) { return this._producerSfuId; }
+        await this.ws.connect();
+        const response = new Promise<SfuId>(resolve => this.once("sfuId", id => resolve(id)));
+        await this.ws.send(JSON.stringify({ excludeId }));
+        return await response;
     }
 
     public constructor(
@@ -62,7 +70,6 @@ export class Room {
     private readonly emitter = new EventEmitter<RoomEventMap>();
     private sessionMap = new Map<string, Set<ProducerId>>();
     private trackInfoByProducerId?: Map<ProducerId,TrackInfo>;
-    private _sfuIdCache?: SfuId;
 
     private onTransportStateChange(state: TransportState) {
         switch(state) {
@@ -82,7 +89,7 @@ export class Room {
     private handleMessage(e: TrackInfoEvent) {
         if("add" in e) { this.addTrackInfo(e.add); }
         if("remove" in e) { this.removeTrackInfo(e.remove); }
-        if("sfuId" in e) { this.setSfuId(e.sfuId); }
+        if("sfuId" in e) { this.setProducerSfuId(e.sfuId); }
     }
 
     private addTrackInfo(trackInfo: TrackInfo) {
@@ -119,8 +126,8 @@ export class Room {
         this.sessionMap.get(trackInfo.sessionId)?.delete(id);
     }
 
-    private setSfuId(id: SfuId) {
-        this._sfuIdCache = id;
+    private setProducerSfuId(id: SfuId) {
+        this._producerSfuId = id;
         this.emitter.emit("sfuId", id);
     }
 }

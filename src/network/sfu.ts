@@ -96,7 +96,6 @@ export type PauseEvent = {
 }
 
 export class SFU {
-
     public async getTrack(producerId: ProducerId) {
         const producer = this.producers.get(producerId);
         if(producer) { return producer; }
@@ -128,6 +127,12 @@ export class SFU {
 
     private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>();
     private readonly ws: WSTransport;
+    private retryDelay = 1000;
+    private retryAttempts = 0;
+    // Whether we are producing tracks on the SFU.
+    public get producer() {
+        return this.producers.size > 0;
+    }
 
     public constructor(
         public readonly id: SfuId,
@@ -136,7 +141,7 @@ export class SFU {
         this.ws = new WSTransport(
             url,
             (_, d) => this.onTransportMessage(d),
-            t => SFU.onTransportStateChange(t),
+            t => this.onTransportStateChange(t),
             ["live-sfu"],
             true,
             null,
@@ -158,7 +163,7 @@ export class SFU {
 
         const track = await getTrack();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
-        if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not recieve '${track.kind}' tracks`); }
+        if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`); }
 
         const mediaSoupProducer = await producerTransport.produce({
             track,
@@ -273,8 +278,31 @@ export class SFU {
     private _requestId = 0;
     private generateRequestId() { return `${this._requestId++}` as RequestId; }
 
-    private static onTransportStateChange(state: TransportState) {
-        console.info(`Transport state changed to ${state}`);
+    private onTransportStateChange(state: TransportState) {
+        switch (state) {
+        case "error":
+            console.info(`Transport state changed to ${state}`);
+            this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.producer));
+            this.retryAttempts++;
+            this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
+            break;
+        case "connected":
+            console.info(`Transport state changed to ${state}`);
+            this.retryAttempts = 0;
+            break;
+        default:
+            console.info(`Transport state changed to ${state}`);
+        }
+    }
+
+    private async waitRetry() {
+        if (this.retryAttempts < 10) {
+            await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+        } else if (this.retryAttempts < 20) {
+            await new Promise(resolve => setTimeout(resolve, 3 * this.retryDelay));
+        } else {
+            await new Promise(resolve => setTimeout(resolve, 5 * this.retryDelay));
+        }
     }
 
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
@@ -289,7 +317,7 @@ export class SFU {
         const response = JSON.parse(data.toString());
         if (typeof response !== "object" || !response) { return; }
         if (response.code !== undefined && response.name !== undefined && response.message !== undefined) {
-            this.emitter.emit("error", <SfuAuthErrors>response);
+            this.emitter.emit("authError", <SfuAuthErrors>response);
             return;
         }
         return response as ResponseMessage;
@@ -499,6 +527,16 @@ export type MissingAuthorizationError = SfuAuthError & {
 
 export type SfuAuthErrors = AuthenticationError | AuthorizationError | TokenMismatchError | MissingAuthenticationError | MissingAuthorizationError;
 
+export class SfuConnectionError implements Error {
+    public readonly name = "SfuConnectionError";
+    constructor(
+        public readonly message: string,
+        public readonly retries: number,
+        public readonly id: SfuId,
+        public readonly producerError: boolean = false) {}
+}
+
 export type SfuEventMap = {
-    error: (error: SfuAuthErrors) => void,
+    authError: (error: SfuAuthErrors) => void,
+    connectionError: (error: SfuConnectionError) => void,
 }

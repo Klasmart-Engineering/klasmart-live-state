@@ -1,13 +1,13 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
-import { SFU, SfuId, SfuAuthErrors } from "../network/sfu";
+import {SFU, SfuId, SfuAuthErrors, SfuConnectionError} from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
 
 
 export class WebRtcManager {
     public microphoneConstraints?: MediaStreamConstraints["audio"];
     public readonly microphone = new TrackSender(
-        () => this.selectSfu(),
+        () => this.selectProducerSfu(),
         microphoneGetter(() => this.microphoneConstraints),
         "microphone",
         this.sessionId,
@@ -15,7 +15,7 @@ export class WebRtcManager {
 
     public cameraConstraints?: MediaStreamConstraints["video"];
     public readonly camera = new TrackSender(
-        () => this.selectSfu(),
+        () => this.selectProducerSfu(),
         cameraGetter(() => this.cameraConstraints),
         "camera",
         this.sessionId,
@@ -23,7 +23,7 @@ export class WebRtcManager {
 
     public screenshareConstraints?: DisplayMediaStreamConstraints;
     public readonly screenshare = new TrackSender(
-        () => this.selectSfu(),
+        () => this.selectProducerSfu(),
         screenshareGetter(() => this.screenshareConstraints),
         "screenshare-video",
         this.sessionId,
@@ -65,7 +65,16 @@ export class WebRtcManager {
         this.room = new Room(wsEndpoint.toString());
     }
 
-    private onSfuError(error: SfuAuthErrors) {
+    private async onSfuConnectionError(error: SfuConnectionError) {
+        if (error.producerError && error.retries > 10) {
+            console.error(`Cannot seem to reliably connect to SFU(${error.id}), attempting to acquire a different sfu`);
+            this.sfus.delete(error.id);
+            await this.selectProducerSfu(error.id);
+        }
+        console.error(error);
+    }
+
+    private onSfuAuthError(error: SfuAuthErrors) {
         console.error(error.name);
         enum SfuAuthErrorCodes {
             INVALID = 4400,
@@ -152,14 +161,15 @@ export class WebRtcManager {
         if (!sfu) {
             const url = this.getSfuUrl(id);
             sfu = new SFU(id, url);
-            sfu.emitter.on("error", (err) => this.onSfuError(err));
+            sfu.emitter.on("authError", (err) => this.onSfuAuthError(err));
+            sfu.emitter.on("connectionError", (err) => this.onSfuConnectionError(err));
             this.sfus.set(id, sfu);
         }
         return sfu;
     }
 
-    private async selectSfu() {
-        const id = await this.room.getSfuId();
+    private async selectProducerSfu(excludeId?: SfuId) {
+        const id = await this.room.getProducerSfuId(excludeId);
         return this.sfu(id);
     }
 

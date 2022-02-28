@@ -19,15 +19,16 @@ export declare class Room {
     readonly on: Room["emitter"]["on"];
     readonly off: Room["emitter"]["off"];
     readonly once: Room["emitter"]["once"];
+    private _producerSfuId?;
     tracks(): TrackInfo[];
     getSessionTracks(sessionId: string): TrackInfo[];
-    getSfuId(useCache?: boolean): Promise<SfuId>;
+    getSfuIds(): Promise<SfuId[]>;
+    getProducerSfuId(excludeId?: SfuId): Promise<SfuId>;
     constructor(endpoint: string);
     private readonly ws;
     private readonly emitter;
     private sessionMap;
     private trackInfoByProducerId?;
-    private _sfuIdCache?;
     private onTransportStateChange;
     private onTransportMessage;
     private handleMessage;
@@ -35,7 +36,7 @@ export declare class Room {
     private removeTrackInfo;
     private addProducerIdToSession;
     private removeProducerIdFromSession;
-    private setSfuId;
+    private setProducerSfuId;
 }
 export declare type RoomEventMap = {
     tracksUpdated: (tracks: Map<ProducerId, TrackInfo>) => void;

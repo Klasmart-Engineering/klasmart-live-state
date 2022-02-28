@@ -23,10 +23,11 @@ export declare class WebRtcManager {
     pause({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     readonly room: Room;
     constructor(baseEndpoint: URL, sessionId?: string | undefined, onAuthorizationInvalid?: (() => unknown) | undefined, onAuthorizationExpired?: (() => unknown) | undefined, onAuthenticationExpired?: (() => unknown) | undefined, onAuthenticationInvalid?: (() => unknown) | undefined, onTokenMismatch?: (() => unknown) | undefined, onMissingAuthenticationToken?: (() => unknown) | undefined, onMissingAuthorizationToken?: (() => unknown) | undefined);
-    private onSfuError;
+    private onSfuConnectionError;
+    private onSfuAuthError;
     private readonly sfus;
     private sfu;
-    private selectSfu;
+    private selectProducerSfu;
     private getSfuUrl;
 }
 export declare class StreamSender {

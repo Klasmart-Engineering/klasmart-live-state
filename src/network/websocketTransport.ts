@@ -63,6 +63,7 @@ export class WSTransport {
                 ws.addEventListener("open", () => {
                     this.onOpen();
                     this.ws = ws;
+                    done();
                     resolve(ws);
                 });
                 ws.addEventListener("error", (e) => {
@@ -72,6 +73,16 @@ export class WSTransport {
                 });
                 ws.addEventListener("close", () => this.onClose());
                 ws.addEventListener("message", (e) => this.onMessage(e.data));
+
+                const timer = setTimeout(() => {
+                    reject(new Error("Connection timeout"));
+                    this.onStateChange?.("error");
+                    done();
+                    ws.close();
+                }, 5000);
+                function done () {
+                    clearTimeout(timer);
+                }
             });
         }
         return this._wsPromise;

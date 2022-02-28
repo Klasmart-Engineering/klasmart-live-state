@@ -43,7 +43,7 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
                 videoLocation: tracks.find(t => t.name === videoName),
             };
         },
-        [ctx, sessionId, audioName, videoName], 
+        [ctx, sessionId, audioName, videoName],
     );
     const [{audioLocation, videoLocation}, setLocations] = useState(getTracks);
     useEffect(() => {
@@ -115,7 +115,7 @@ const useTrackState = (
     track?: SfuTrack,
 ) => {
     const rerender = useRerender();
-    
+
     useEffect(() => {
         if(!track) { return; }
         track.on("pausedAtSource", rerender);
@@ -131,7 +131,7 @@ const useTrackState = (
     const isActiveLocally = track?.pausedLocally === false;
     const isActiveAtProducer = track?.pausedAtSource === false;
     const isActiveGlobally = isActiveAtProducer && track?.pausedGlobally === false;
-    
+
     return {
         isConsumable: isActiveGlobally && isActiveLocally,
         isPausedLocally: track?.pausedLocally !== false,

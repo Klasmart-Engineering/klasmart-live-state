@@ -92,6 +92,9 @@ export declare class SFU {
     private readonly device;
     private readonly promiseCompleter;
     private readonly ws;
+    private retryDelay;
+    private retryAttempts;
+    get producer(): boolean;
     constructor(id: SfuId, url: string);
     private readonly producerResolvers;
     private readonly producers;
@@ -108,7 +111,8 @@ export declare class SFU {
     private request;
     private _requestId;
     private generateRequestId;
-    private static onTransportStateChange;
+    private onTransportStateChange;
+    private waitRetry;
     private onTransportMessage;
     private parse;
     private handleMessage;
@@ -194,8 +198,17 @@ export declare type MissingAuthorizationError = SfuAuthError & {
     name: "MissingAuthorizationError";
 };
 export declare type SfuAuthErrors = AuthenticationError | AuthorizationError | TokenMismatchError | MissingAuthenticationError | MissingAuthorizationError;
+export declare class SfuConnectionError implements Error {
+    readonly message: string;
+    readonly retries: number;
+    readonly id: SfuId;
+    readonly producerError: boolean;
+    readonly name = "SfuConnectionError";
+    constructor(message: string, retries: number, id: SfuId, producerError?: boolean);
+}
 export declare type SfuEventMap = {
-    error: (error: SfuAuthErrors) => void;
+    authError: (error: SfuAuthErrors) => void;
+    connectionError: (error: SfuConnectionError) => void;
 };
 export {};
 //# sourceMappingURL=sfu.d.ts.map
