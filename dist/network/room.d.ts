@@ -21,13 +21,13 @@ export declare class Room {
     readonly once: Room["emitter"]["once"];
     tracks(): TrackInfo[];
     getSessionTracks(sessionId: string): TrackInfo[];
-    getSfuId(): Promise<SfuId>;
+    getSfuId(useCache?: boolean): Promise<SfuId>;
     constructor(endpoint: string);
     private readonly ws;
     private readonly emitter;
     private sessionMap;
     private trackInfoByProducerId?;
-    private _sfuId?;
+    private _sfuIdCache?;
     private onTransportStateChange;
     private onTransportMessage;
     private handleMessage;

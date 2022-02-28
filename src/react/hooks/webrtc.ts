@@ -144,10 +144,10 @@ export const useMediaStreamTracks = (
     ...nextTrackSet: Array<MediaStreamTrack | null | undefined>
 ) => {
     const stream = useMemo(() => new MediaStream(), []);
-    const previousTrackSet = new Set(stream.getAudioTracks());
+    const previousTrackSet = new Set(stream.getTracks());
     
     for(const track of nextTrackSet) {
-        if(!track) { continue; }
+        if(!track || track.readyState !== "live") { continue; }
         const isNewTrack = !previousTrackSet.delete(track);
         if(isNewTrack) { stream.addTrack(track); }
     }

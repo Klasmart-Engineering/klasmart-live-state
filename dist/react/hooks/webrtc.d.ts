@@ -1,6 +1,5 @@
 import { TrackLocation } from "../../network/room";
-import { WebRtcManager } from "../rtcContext";
-export declare const useWebRtcConstraints: (ctx?: WebRtcManager) => {
+export declare const useWebRtcConstraints: (ctx?: import("../rtcContext").WebRtcManager) => {
     getCameraConstraints: () => boolean | MediaTrackConstraints | undefined;
     setCameraConstraints: (constraints?: MediaStreamConstraints["audio"]) => boolean | MediaTrackConstraints | undefined;
     getMicrophoneConstraints: () => boolean | MediaTrackConstraints | undefined;
@@ -8,7 +7,7 @@ export declare const useWebRtcConstraints: (ctx?: WebRtcManager) => {
     getScreenshareConstraints: () => DisplayMediaStreamConstraints | undefined;
     setScreenshareConstraints: (constraints?: DisplayMediaStreamConstraints | undefined) => DisplayMediaStreamConstraints | undefined;
 };
-export declare const useCamera: (ctx?: WebRtcManager) => {
+export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
@@ -18,7 +17,7 @@ export declare const useCamera: (ctx?: WebRtcManager) => {
     isPausedGlobally: boolean;
     isPausedAtSource: boolean;
 };
-export declare const useMicrophone: (ctx?: WebRtcManager) => {
+export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
@@ -28,7 +27,7 @@ export declare const useMicrophone: (ctx?: WebRtcManager) => {
     isPausedGlobally: boolean;
     isPausedAtSource: boolean;
 };
-export declare const useScreenshare: (ctx?: WebRtcManager) => {
+export declare const useScreenshare: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
     start: import("react-async-hook").UseAsyncReturn<void, []>;
     stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
@@ -42,7 +41,7 @@ export declare type StreamNamePair = {
     audio: string;
     video: string;
 };
-export declare function useStream(sessionId: string, name?: string | StreamNamePair, ctx?: WebRtcManager): {
+export declare function useStream(sessionId: string, name?: string | StreamNamePair, ctx?: import("../rtcContext").WebRtcManager): {
     audio: {
         kind: "audio" | "video" | undefined;
         isMine: boolean | undefined;
@@ -73,7 +72,7 @@ export declare function useStream(sessionId: string, name?: string | StreamNameP
     };
     stream: MediaStream;
 };
-export declare const useTrack: (location?: TrackLocation | undefined, ctx?: WebRtcManager) => {
+export declare const useTrack: (location?: TrackLocation | undefined, ctx?: import("../rtcContext").WebRtcManager) => {
     kind: "audio" | "video" | undefined;
     isMine: boolean | undefined;
     start: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
