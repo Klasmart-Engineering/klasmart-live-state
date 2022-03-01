@@ -10,13 +10,27 @@ export class TrackSender {
     public async start() {
         //TODO: Check for race conditions
         if(this._producer) { return await this._producer.start(); }
-        if(!this._sfu) { this._sfu = await this.getSfu(); }
-        this._producer = await this._sfu.produceTrack(
+        if(!this.sfu) { this.sfu = await this.getSfu(); }
+        this._producer = await this.sfu.produceTrack(
             this.getTrack,
             this.name,
             this.sessionId,
         );
         this.emitter.emit("producer");
+    }
+
+    public async close() {
+        if(this._producer) {
+            await this._producer.close();
+            this._producer = undefined;
+        }
+        if(this.sfu) {
+            this.sfu = undefined;
+        }
+    }
+
+    public get sfuId() {
+        return this.sfu?.id;
     }
 
     public constructor (
@@ -27,7 +41,7 @@ export class TrackSender {
     ) {}
 
     private _producer?: Producer;
-    private _sfu?: SFU;
+    private sfu?: SFU;
     private emitter = new EventEmitter<{
         producer: []
     }>();

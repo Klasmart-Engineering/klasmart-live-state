@@ -66,11 +66,32 @@ export class WebRtcManager {
     }
 
     private async onSfuConnectionError(error: SfuConnectionError) {
-        if (error.producerError && error.retries > 10) {
-            console.error(`Cannot seem to reliably connect to SFU(${error.id}), attempting to acquire a different sfu`);
-            this.sfus.delete(error.id);
-            await this.selectProducerSfu(error.id);
+        try {
+            if (error.producerError && error.retries > 10 && this.sfus.has(error.id)) {
+                console.error(`Cannot seem to reliably connect to SFU(${error.id}), attempting to acquire a different sfu`);
+
+                const sfu = this.sfus.get(error.id);
+                await sfu?.close();
+                this.sfus.delete(error.id);
+                await this.selectProducerSfu(error.id);
+
+                if (this.camera.sfuId === error.id) {
+                    await this.camera.close();
+                    await this.camera.start();
+                }
+                if (this.microphone.sfuId === error.id) {
+                    await this.microphone.close();
+                    await this.microphone.start();
+                }
+                if (this.screenshare.sfuId === error.id) {
+                    await this.screenshare.close();
+                    await this.screenshare.start();
+                }
+            }
+        } catch (e) {
+            console.error(e);
         }
+
         console.error(error);
     }
 

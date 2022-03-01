@@ -9,9 +9,11 @@ export declare class TrackSender {
     once: TrackSender["emitter"]["once"];
     get producer(): Producer | undefined;
     start(): Promise<void>;
+    close(): Promise<void>;
+    get sfuId(): import("./sfu").SfuId | undefined;
     constructor(getSfu: () => Promise<SFU>, getTrack: () => Promise<MediaStreamTrack>, name: string, sessionId?: string | undefined);
     private _producer?;
-    private _sfu?;
+    private sfu?;
     private emitter;
 }
 //# sourceMappingURL=trackSender.d.ts.map

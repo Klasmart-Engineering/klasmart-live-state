@@ -94,12 +94,16 @@ export declare class SFU {
     private readonly ws;
     private retryDelay;
     private retryAttempts;
+    private retryMaxAttempts;
+    private retryTimer?;
     get producer(): boolean;
     constructor(id: SfuId, url: string);
     private readonly producerResolvers;
     private readonly producers;
     private readonly consumers;
     emitter: EventEmitter<SfuEventMap, any>;
+    private closed;
+    close(): Promise<void>;
     private createProducer;
     private createConsumer;
     pauseGlobally(id: ProducerId, paused: boolean): Promise<void | Result>;

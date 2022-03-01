@@ -129,6 +129,8 @@ export class SFU {
     private readonly ws: WSTransport;
     private retryDelay = 1000;
     private retryAttempts = 0;
+    private retryMaxAttempts = 30;
+    private retryTimer?: NodeJS.Timeout;
     // Whether we are producing tracks on the SFU.
     public get producer() {
         return this.producers.size > 0;
@@ -153,6 +155,19 @@ export class SFU {
     private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
     public emitter = new EventEmitter<SfuEventMap>();
+    private closed = false;
+
+    public async close() {
+        console.log(`Closing SFU ${this.id}`);
+        this.closed = true;
+        this.producers.forEach(p => p.then(p => p.close()));
+        this.consumers.forEach(c => c.then(c => c.close()));
+        this.ws.disconnect();
+        if (this.retryTimer) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = undefined;
+        }
+    }
 
     private async createProducer(
         getTrack: () => Promise<MediaStreamTrack>,
@@ -284,11 +299,25 @@ export class SFU {
             console.info(`Transport state changed to ${state}`);
             this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.producer));
             this.retryAttempts++;
-            this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
+            if (this.retryAttempts < this.retryMaxAttempts && !this.closed)
+                this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
+            else {
+                if (this.retryTimer) {
+                    clearTimeout(this.retryTimer);
+                    this.retryTimer = undefined;
+                }
+
+                console.log("Max retry attempts reached, closing connection");
+            }
             break;
         case "connected":
             console.info(`Transport state changed to ${state}`);
             this.retryAttempts = 0;
+            if (this.retryTimer) {
+                clearTimeout(this.retryTimer);
+                this.retryTimer = undefined;
+            }
+
             break;
         default:
             console.info(`Transport state changed to ${state}`);
@@ -297,11 +326,11 @@ export class SFU {
 
     private async waitRetry() {
         if (this.retryAttempts < 10) {
-            await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+            await new Promise(resolve => this.retryTimer = setTimeout(resolve, this.retryDelay));
         } else if (this.retryAttempts < 20) {
-            await new Promise(resolve => setTimeout(resolve, 3 * this.retryDelay));
+            await new Promise(resolve => this.retryTimer = setTimeout(resolve, 3 * this.retryDelay));
         } else {
-            await new Promise(resolve => setTimeout(resolve, 5 * this.retryDelay));
+            await new Promise(resolve => this.retryTimer = setTimeout(resolve, 5 * this.retryDelay));
         }
     }
 

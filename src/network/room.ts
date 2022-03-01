@@ -46,6 +46,7 @@ export class Room {
 
     public async getProducerSfuId(excludeId?: SfuId) {
         if(this._producerSfuId && excludeId !== this._producerSfuId) { return this._producerSfuId; }
+        this._producerSfuId = undefined;
         await this.ws.connect();
         const response = new Promise<SfuId>(resolve => this.once("sfuId", id => resolve(id)));
         await this.ws.send(JSON.stringify({ excludeId }));
