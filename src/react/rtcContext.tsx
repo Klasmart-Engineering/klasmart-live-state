@@ -80,14 +80,12 @@ export class WebRtcManager {
                     this.screenshare,    
                 ].flatMap(sender => {
                     if(sender.sfuId !== error.id) { return; }
-                    return this.camera.changeState("switching-sfu");
+                    return this.sender.changeState("switching-sfu");
                 }));
             }
         } catch (e) {
             console.error(e);
         }
-
-        console.error(error);
     }
 
     private onSfuAuthError(error: SfuAuthErrors) {
