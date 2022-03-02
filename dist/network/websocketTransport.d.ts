@@ -15,7 +15,6 @@ export declare class WSTransport {
     send(data: string | ArrayBufferLike | Blob | ArrayBufferView): Promise<void>;
     private ws?;
     private _wsPromise?;
-    private connectionTimer?;
     private _connect;
     private onMessage;
     private onOpen;

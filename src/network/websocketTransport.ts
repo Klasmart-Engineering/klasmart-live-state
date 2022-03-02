@@ -38,9 +38,6 @@ export class WSTransport {
         if (this.sendTimeoutReference) {
             clearTimeout(this.sendTimeoutReference);
         }
-        if (this.connectionTimer) {
-            clearTimeout(this.connectionTimer);
-        }
     }
 
     public async send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
@@ -57,45 +54,40 @@ export class WSTransport {
 
     private ws?: WebSocket;
     private _wsPromise?: Promise<WebSocket>;
-    private connectionTimer?: Timeout;
     private async _connect() {
         if (!this._wsPromise || this.ws?.readyState === WebSocket.CLOSED) {
             this._wsPromise = new Promise<WebSocket>((resolve, reject) => {
                 const ws = new WebSocket(this.url, this.protocols);
                 ws.binaryType = "arraybuffer";
                 this.onStateChange?.("connecting");
+                const connectionTimer = setTimeout(() => {
+                    reject(new Error("Connection timeout"));
+                    this.onStateChange?.("error");
+                    if (connectionTimer) {
+                        clearTimeout(connectionTimer);
+                    }
+                    ws.close();
+                }, 5000);
                 ws.addEventListener("open", () => {
                     this.onOpen();
                     this.ws = ws;
-                    if (this.connectionTimer) {
-                        clearTimeout(this.connectionTimer);
+                    if (connectionTimer) {
+                        clearTimeout(connectionTimer);
                     }
                     resolve(ws);
                 });
 
                 ws.addEventListener("error", (e) => {
                     console.error(e);
-                    if (this.connectionTimer) {
-                        clearTimeout(this.connectionTimer);
-                    }
                     this.onError();
                     reject(e);
                 });
 
                 ws.addEventListener("close", () => this.onClose());
                 ws.addEventListener("message", (e) => this.onMessage(e.data));
-
-                this.connectionTimer = setTimeout(() => {
-                    reject(new Error("Connection timeout"));
-                    this.onStateChange?.("error");
-                    if (this.connectionTimer) {
-                        clearTimeout(this.connectionTimer);
-                    }
-                    ws.close();
-                }, 5000);
             });
         }
-        return this._wsPromise;
+        return await this._wsPromise;
     }
 
     private onMessage(data: string | ArrayBuffer | Blob) {
@@ -112,9 +104,6 @@ export class WSTransport {
     private onClose() {
         this.ws = undefined;
         this._wsPromise = undefined;
-        if (this.connectionTimer) {
-            clearTimeout(this.connectionTimer);
-        }
         this.onStateChange?.("not-connected");
     }
 
