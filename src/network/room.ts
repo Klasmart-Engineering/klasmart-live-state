@@ -30,28 +30,9 @@ export class Room {
     public readonly once: Room["emitter"]["once"] = (event, listener) => this.emitter.once(event, listener);
     // The sfu on which the client will attempt to place their tracks.
     private _producerSfuId?: SfuId;
-
-    public tracks() { return [...(this.trackInfoByProducerId ?? []).values()]; }
-
-    public getSessionTracks(sessionId: string): TrackInfo[] {
-        this.ws.connect().catch((e) =>  console.error(e));
-        const producerIds = this.sessionMap.get(sessionId);
-        if(!producerIds) { return []; }
-        return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId?.get(id) || []);
-    }
-
-    public async getSfuIds() {
-        return this.tracks().map(t => t.sfuId);
-    }
-
-    public async getProducerSfuId(excludeId?: SfuId) {
-        if(this._producerSfuId && excludeId !== this._producerSfuId) { return this._producerSfuId; }
-        this._producerSfuId = undefined;
-        await this.ws.connect();
-        const response = new Promise<SfuId>(resolve => this.once("sfuId", id => resolve(id)));
-        await this.ws.send(JSON.stringify({ excludeId }));
-        return await response;
-    }
+    private readonly ws: WSTransport;
+    private readonly emitter = new EventEmitter<RoomEventMap>();
+    private sessionMap = new Map<string, Set<ProducerId>>();
 
     public constructor(
         public readonly endpoint: string,
@@ -67,11 +48,31 @@ export class Room {
         );
     }
 
-    private readonly ws: WSTransport;
-    private readonly emitter = new EventEmitter<RoomEventMap>();
-    private sessionMap = new Map<string, Set<ProducerId>>();
-    private trackInfoByProducerId?: Map<ProducerId,TrackInfo>;
+    public tracks() { return [...(this.trackInfoByProducerId ?? []).values()]; }
 
+    public getSessionTracks(sessionId: string): TrackInfo[] {
+        this.ws.connect().catch((e) =>  console.error(e));
+        const producerIds = this.sessionMap.get(sessionId);
+        if(!producerIds) { return []; }
+        return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId?.get(id) || []);
+    }
+
+    public async getSfuIds() {
+        const sfuIds = new Set<SfuId>();
+        this.tracks().map(t => sfuIds.add(t.sfuId));
+        return [...sfuIds];
+    }
+
+    public async getProducerSfuId(excludeId?: SfuId) {
+        if(this._producerSfuId && excludeId !== this._producerSfuId) { return this._producerSfuId; }
+        this._producerSfuId = undefined;
+        const response = new Promise<SfuId>(resolve => this.once("sfuId", id => resolve(id)));
+        await this.ws.connect();
+        await this.ws.send(JSON.stringify({ excludeId }));
+        return await response;
+    }
+
+    private trackInfoByProducerId?: Map<ProducerId,TrackInfo>;
     private onTransportStateChange(state: TransportState) {
         switch(state) {
         case "not-connected":

@@ -96,6 +96,37 @@ export type PauseEvent = {
 }
 
 export class SFU {
+    private _requestId = 0;
+    private readonly device = new Device();
+    private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>();
+    private readonly ws: WSTransport;
+    private retryDelay = 1000;
+    private retryAttempts = 0;
+    private retryMaxAttempts = 30;
+    private retryTimer?: NodeJS.Timeout;
+    private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
+    private readonly producers = new Map<ProducerId, Promise<Producer>>();
+    private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
+    public emitter = new EventEmitter<SfuEventMap>();
+    private closed = false;
+
+    public constructor(
+        public readonly id: SfuId,
+        public readonly url: string,
+    ) {
+        this.ws = new WSTransport(
+            url,
+            (_, d) => this.onTransportMessage(d),
+            t => this.onTransportStateChange(t),
+            ["live-sfu"],
+            true,
+            null,
+        );
+        this.ws.connect().catch(e => console.error(e));
+    }
+
+    private generateRequestId() { return `${this._requestId++}` as RequestId; }
+
     public async getTrack(producerId: ProducerId) {
         const producer = this.producers.get(producerId);
         if(producer) { return producer; }
@@ -123,39 +154,9 @@ export class SFU {
         return await consumerPromise;
     }
 
-    private readonly device = new Device();
-
-    private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>();
-    private readonly ws: WSTransport;
-    private retryDelay = 1000;
-    private retryAttempts = 0;
-    private retryMaxAttempts = 30;
-    private retryTimer?: NodeJS.Timeout;
-    // Whether we are producing tracks on the SFU.
-    public get producer() {
+    public get hasProducers() {
         return this.producers.size > 0;
     }
-
-    public constructor(
-        public readonly id: SfuId,
-        public readonly url: string,
-    ) {
-        this.ws = new WSTransport(
-            url,
-            (_, d) => this.onTransportMessage(d),
-            t => this.onTransportStateChange(t),
-            ["live-sfu"],
-            true,
-            null,
-        );
-        this.ws.connect().catch(e => console.error(e));
-    }
-
-    private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
-    private readonly producers = new Map<ProducerId, Promise<Producer>>();
-    private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
-    public emitter = new EventEmitter<SfuEventMap>();
-    private closed = false;
 
     public async close() {
         console.log(`Closing SFU ${this.id}`);
@@ -163,9 +164,14 @@ export class SFU {
         this.producers.forEach(p => p.then(p => p.close()));
         this.consumers.forEach(c => c.then(c => c.close()));
         this.ws.disconnect();
+        this.clearRetries();
+    }
+
+    private clearRetries() {
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);
             this.retryTimer = undefined;
+            this.retryAttempts = 0;
         }
     }
 
@@ -290,34 +296,24 @@ export class SFU {
         return this.promiseCompleter.createPromise(id);
     }
 
-    private _requestId = 0;
-    private generateRequestId() { return `${this._requestId++}` as RequestId; }
-
     private onTransportStateChange(state: TransportState) {
         switch (state) {
         case "error":
             console.info(`Transport state changed to ${state}`);
-            this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.producer));
             this.retryAttempts++;
-            if (this.retryAttempts < this.retryMaxAttempts && !this.closed)
+            if (this.retryAttempts < this.retryMaxAttempts && !this.closed) {
+                console.log(`id: ${this.id} closed: ${this.closed} retries: ${this.retryAttempts}/${this.retryMaxAttempts}`);
+                this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.hasProducers));
                 this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
+            }
             else {
-                if (this.retryTimer) {
-                    clearTimeout(this.retryTimer);
-                    this.retryTimer = undefined;
-                }
-
+                this.clearRetries();
                 console.log("Max retry attempts reached, closing connection");
             }
             break;
         case "connected":
             console.info(`Transport state changed to ${state}`);
-            this.retryAttempts = 0;
-            if (this.retryTimer) {
-                clearTimeout(this.retryTimer);
-                this.retryTimer = undefined;
-            }
-
+            this.clearRetries();
             break;
         default:
             console.info(`Transport state changed to ${state}`);
