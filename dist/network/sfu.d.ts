@@ -86,9 +86,7 @@ export declare type PauseEvent = {
 export declare class SFU {
     readonly id: SfuId;
     readonly url: string;
-    getTrack(producerId: ProducerId): Promise<Producer | Consumer>;
-    produceTrack(getTrack: () => Promise<MediaStreamTrack>, name: string, sessionId?: string): Promise<Producer>;
-    consumeTrack(producerId: ProducerId): Promise<Consumer>;
+    private _requestId;
     private readonly device;
     private readonly promiseCompleter;
     private readonly ws;
@@ -96,14 +94,19 @@ export declare class SFU {
     private retryAttempts;
     private retryMaxAttempts;
     private retryTimer?;
-    get producer(): boolean;
-    constructor(id: SfuId, url: string);
     private readonly producerResolvers;
     private readonly producers;
     private readonly consumers;
     emitter: EventEmitter<SfuEventMap, any>;
     private closed;
+    constructor(id: SfuId, url: string);
+    private generateRequestId;
+    getTrack(producerId: ProducerId): Promise<Producer | Consumer>;
+    produceTrack(getTrack: () => Promise<MediaStreamTrack>, name: string, sessionId?: string): Promise<Producer>;
+    consumeTrack(producerId: ProducerId): Promise<Consumer>;
+    get hasProducers(): boolean;
     close(): Promise<void>;
+    private clearRetries;
     private createProducer;
     private createConsumer;
     pauseGlobally(id: ProducerId, paused: boolean): Promise<void | Result>;
@@ -113,8 +116,6 @@ export declare class SFU {
     private sendRtpCapabilities;
     private loadDevice;
     private request;
-    private _requestId;
-    private generateRequestId;
     private onTransportStateChange;
     private waitRetry;
     private onTransportMessage;

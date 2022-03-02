@@ -33,6 +33,7 @@ export class Room {
     private readonly ws: WSTransport;
     private readonly emitter = new EventEmitter<RoomEventMap>();
     private sessionMap = new Map<string, Set<ProducerId>>();
+    private trackInfoByProducerId = new Map<ProducerId,TrackInfo>();
 
     public constructor(
         public readonly endpoint: string,
@@ -48,13 +49,13 @@ export class Room {
         );
     }
 
-    public tracks() { return [...(this.trackInfoByProducerId ?? []).values()]; }
+    public tracks() { return [...this.trackInfoByProducerId.values()]; }
 
     public getSessionTracks(sessionId: string): TrackInfo[] {
         this.ws.connect().catch((e) =>  console.error(e));
         const producerIds = this.sessionMap.get(sessionId);
         if(!producerIds) { return []; }
-        return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId?.get(id) || []);
+        return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId.get(id) ?? []);
     }
 
     public async getSfuIds() {
@@ -72,7 +73,6 @@ export class Room {
         return await response;
     }
 
-    private trackInfoByProducerId?: Map<ProducerId,TrackInfo>;
     private onTransportStateChange(state: TransportState) {
         switch(state) {
         case "not-connected":
@@ -95,18 +95,16 @@ export class Room {
     }
 
     private addTrackInfo(trackInfo: TrackInfo) {
-        const currentTrackInfo = this.trackInfoByProducerId?.get(trackInfo.producerId);
+        const currentTrackInfo = this.trackInfoByProducerId.get(trackInfo.producerId);
         if(currentTrackInfo && trackInfoEquals(currentTrackInfo, trackInfo)) { return; }
 
         if(trackInfo.sessionId) { this.addProducerIdToSession(trackInfo.sessionId, trackInfo.producerId); }
-        if(!this.trackInfoByProducerId) {this.trackInfoByProducerId = new Map<ProducerId,TrackInfo>(); }
-
         this.trackInfoByProducerId.set(trackInfo.producerId, trackInfo);
         this.emitter.emit("tracksUpdated", this.trackInfoByProducerId);
     }
 
     private removeTrackInfo(id: ProducerId) {
-        if(!this.trackInfoByProducerId) { return; }
+        if(!this.trackInfoByProducerId.has(id)) { return; }
         this.removeProducerIdFromSession(id);
         this.trackInfoByProducerId.delete(id);
         this.emitter.emit("tracksUpdated", this.trackInfoByProducerId);
@@ -122,7 +120,6 @@ export class Room {
     }
 
     private removeProducerIdFromSession(id: ProducerId) {
-        if(!this.trackInfoByProducerId) { return; }
         const trackInfo = this.trackInfoByProducerId.get(id);
         if(!trackInfo || !trackInfo.sessionId) { return; }
         this.sessionMap.get(trackInfo.sessionId)?.delete(id);

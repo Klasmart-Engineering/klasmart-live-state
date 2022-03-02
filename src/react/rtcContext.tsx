@@ -77,10 +77,10 @@ export class WebRtcManager {
                 await Promise.allSettled([
                     this.camera,
                     this.microphone,
-                    this.screenshare,    
+                    this.screenshare,
                 ].flatMap(sender => {
                     if(sender.sfuId !== error.id) { return; }
-                    return this.sender.changeState("switching-sfu");
+                    return sender.changeState("switching-sfu");
                 }));
             }
         } catch (e) {
