@@ -63,7 +63,7 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
         ];
         senders.forEach(sender => sender.on("statechange", onUpdate));
         return () => senders.forEach(sender => sender.off("statechange", onUpdate));
-    });
+    }, [setLocations, getTracks, sessionId]);
 
     const audio = useTrack(audioLocation);
     const video = useTrack(videoLocation);

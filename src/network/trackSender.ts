@@ -48,14 +48,17 @@ export class TrackSender {
     ) {}
 
     private async stateSending() {
-        if(this._producer) { return await this._producer.start(); }
-        if(!this.sfu) { this.sfu = await this.getSfu(); }
-        this._producer = await this.sfu.produceTrack(
-            this.getTrack,
-            this.name,
-            this.sessionId,
-        );
-        this.emitter.emit("statechange", "sending");
+        try {
+            if(this._producer) { return await this._producer.start(); }
+            if(!this.sfu) { this.sfu = await this.getSfu(); }
+            this._producer = await this.sfu.produceTrack(
+                this.getTrack,
+                this.name,
+                this.sessionId,
+            );
+        } finally {
+            this.emitter.emit("statechange", "sending");
+        }
     }
 
     private async stateNotSending() {
