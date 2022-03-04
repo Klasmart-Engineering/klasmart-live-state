@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
-import { Track as SfuTrack } from "../../network/sfu";
+import { Consumer, Producer, Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { WebRtcContext } from "../rtcContext";
 
@@ -49,8 +49,21 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
     useEffect(() => {
         const onUpdate = () => setLocations(getTracks);
         ctx.room.on("tracksUpdated", onUpdate);
-        return () => { ctx.room.off("tracksUpdated", onUpdate); };
+        return () => { ctx.room.off("tracksUpdated", onUpdate);};
     }, [setLocations, getTracks, ctx.room]);
+    
+    useEffect(() => {
+        // This useEffect should be removed once there is time to refactor
+        if(sessionId !== ctx.sessionId) { return; }
+        const onUpdate = () => setLocations(getTracks);
+        const senders = [
+            ctx.camera,
+            ctx.microphone,
+            ctx.screenshare,
+        ];
+        senders.forEach(sender => sender.on("statechange", onUpdate));
+        return () => senders.forEach(sender => sender.off("statechange", onUpdate));
+    });
 
     const audio = useTrack(audioLocation);
     const video = useTrack(videoLocation);
@@ -98,15 +111,14 @@ const useTrackSender = (
 ) => {
     const rerender = useRerender();
     useEffect(() => {
-        trackSender.on("producer", rerender);
-        return () => { trackSender.off("producer", rerender); };
+        trackSender.on("statechange", rerender);
+        return () => { trackSender.off("statechange", rerender); };
     }, [trackSender, rerender]);
 
     return {
         ...useTrackState(trackSender.producer),
         track: trackSender.producer?.track,
-        start: useAsyncCallback(() => trackSender.start()),
-        stop: useAsyncCallback(() => trackSender.producer?.stop()),
+        setSending: useAsyncCallback((send: boolean) => trackSender.changeState(send ? "sending" : "not-sending")),
         globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
     };
 };

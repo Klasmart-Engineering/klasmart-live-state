@@ -74,19 +74,14 @@ export class WebRtcManager {
                 await sfu?.close();
                 this.sfus.delete(error.id);
                 await this.selectProducerSfu(error.id);
-
-                if (this.camera.sfuId === error.id) {
-                    await this.camera.close();
-                    await this.camera.start();
-                }
-                if (this.microphone.sfuId === error.id) {
-                    await this.microphone.close();
-                    await this.microphone.start();
-                }
-                if (this.screenshare.sfuId === error.id) {
-                    await this.screenshare.close();
-                    await this.screenshare.start();
-                }
+                await Promise.allSettled([
+                    this.camera,
+                    this.microphone,
+                    this.screenshare,    
+                ].flatMap(sender => {
+                    if(sender.sfuId !== error.id) { return; }
+                    return this.camera.changeState("switching-sfu");
+                }));
             }
         } catch (e) {
             console.error(e);
@@ -201,50 +196,6 @@ export class WebRtcManager {
     }
 }
 
-export class StreamSender {
-    public async start() {
-        await Promise.all([
-            this.videoSender.start(),
-            this.audioSender.start(),
-        ]);
-    }
-
-    public async stop() {
-        await Promise.all([
-            this.videoSender.producer?.stop(),
-            this.audioSender.producer?.stop(),
-        ]);
-    }
-
-    public readonly videoSender = new TrackSender(
-        this.getSfu,
-        () => videoTrack(this.getStream()),
-        `${this.name}-video`,
-        this.sessionId,
-    );
-
-    public readonly audioSender = new TrackSender(
-        this.getSfu,
-        () => audioTrack(this.getStream()),
-        `${this.name}-audio`,
-        this.sessionId,
-    );
-
-    private readonly getStream: () => Promise<MediaStream>;
-    public constructor(
-        private readonly getSfu: () => Promise<SFU>,
-        getStream: () => Promise<MediaStream>,
-        private readonly name: string,
-        private readonly sessionId?: string | undefined,
-    ) {
-        this.getStream = createCache(
-            getStream,
-            s => s.getTracks().some(t => t.readyState === "ended"),
-        );
-    }
-}
-
-
 const microphoneGetter = (
     getAudioConstraints?: () => MediaStreamConstraints["audio"]
 ) => () => audioTrack(
@@ -275,25 +226,6 @@ export const firstTrack = (tracks: MediaStreamTrack[]) => {
     if(tracks.length > 1) { console.info(`Got ${tracks.length} media tracks, can only use 1`); }
     return track;
 };
-
-function createCache<T>(initializeCache: {():Promise<T>|T}, checkValidity?:{(value: T):boolean}): {():Promise<T>} {
-    let cache: {value: Promise<T>|T}|undefined;
-    return async () => {
-        try {
-            if(cache) {
-                const value = await cache.value;
-                if(!checkValidity || checkValidity(value)) {
-                    return value;
-                }
-            }
-            cache = {value: initializeCache()};
-            return cache.value;
-        } catch (e) {
-            cache = undefined;
-            throw e;
-        }
-    };
-}
 
 export const WebRtcContext = React.createContext<WebRtcManager>(null as any);
 WebRtcContext.displayName = "KidsloopLiveWebRTC";

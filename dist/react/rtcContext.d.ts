@@ -1,6 +1,5 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
-import { SFU } from "../network/sfu";
 import { Room, TrackLocation } from "../network/room";
 export declare class WebRtcManager {
     readonly baseEndpoint: URL;
@@ -29,17 +28,6 @@ export declare class WebRtcManager {
     private sfu;
     private selectProducerSfu;
     private getSfuUrl;
-}
-export declare class StreamSender {
-    private readonly getSfu;
-    private readonly name;
-    private readonly sessionId?;
-    start(): Promise<void>;
-    stop(): Promise<void>;
-    readonly videoSender: TrackSender;
-    readonly audioSender: TrackSender;
-    private readonly getStream;
-    constructor(getSfu: () => Promise<SFU>, getStream: () => Promise<MediaStream>, name: string, sessionId?: string | undefined);
 }
 export declare const audioTrack: (stream: Promise<MediaStream>) => Promise<MediaStreamTrack>;
 export declare const videoTrack: (stream: Promise<MediaStream>) => Promise<MediaStreamTrack>;

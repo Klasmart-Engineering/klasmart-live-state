@@ -1,4 +1,5 @@
 import { TrackLocation } from "../../network/room";
+import { Consumer, Producer } from "../../network/sfu";
 export declare const useWebRtcConstraints: (ctx?: import("../rtcContext").WebRtcManager) => {
     getCameraConstraints: () => boolean | MediaTrackConstraints | undefined;
     setCameraConstraints: (constraints?: MediaStreamConstraints["audio"]) => boolean | MediaTrackConstraints | undefined;
@@ -9,8 +10,7 @@ export declare const useWebRtcConstraints: (ctx?: import("../rtcContext").WebRtc
 };
 export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
-    start: import("react-async-hook").UseAsyncReturn<void, []>;
-    stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
+    setSending: import("react-async-hook").UseAsyncReturn<void, [send: boolean]>;
     globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
@@ -19,8 +19,7 @@ export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) =>
 };
 export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
-    start: import("react-async-hook").UseAsyncReturn<void, []>;
-    stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
+    setSending: import("react-async-hook").UseAsyncReturn<void, [send: boolean]>;
     globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
@@ -29,8 +28,7 @@ export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager
 };
 export declare const useScreenshare: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
-    start: import("react-async-hook").UseAsyncReturn<void, []>;
-    stop: import("react-async-hook").UseAsyncReturn<void | undefined, []>;
+    setSending: import("react-async-hook").UseAsyncReturn<void, [send: boolean]>;
     globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
@@ -53,7 +51,7 @@ export declare function useStream(sessionId: string, name?: string | StreamNameP
         isPausedLocally: boolean;
         isPausedGlobally: boolean;
         isPausedAtSource: boolean;
-        track: import("../../network/sfu").Producer | import("../../network/sfu").Consumer | undefined;
+        track: Producer | Consumer | undefined;
         hasLocation: boolean;
     };
     video: {
@@ -67,7 +65,7 @@ export declare function useStream(sessionId: string, name?: string | StreamNameP
         isPausedLocally: boolean;
         isPausedGlobally: boolean;
         isPausedAtSource: boolean;
-        track: import("../../network/sfu").Producer | import("../../network/sfu").Consumer | undefined;
+        track: Producer | Consumer | undefined;
         hasLocation: boolean;
     };
     stream: MediaStream;
@@ -83,7 +81,7 @@ export declare const useTrack: (location?: TrackLocation | undefined, ctx?: impo
     isPausedLocally: boolean;
     isPausedGlobally: boolean;
     isPausedAtSource: boolean;
-    track: import("../../network/sfu").Producer | import("../../network/sfu").Consumer | undefined;
+    track: Producer | Consumer | undefined;
     hasLocation: boolean;
 };
 export declare type Track = ReturnType<typeof useTrack>;
