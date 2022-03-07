@@ -73,14 +73,15 @@ export class WebRtcManager {
             if (error.producerError) {
                 console.error(`Cannot seem to reliably connect to SFU(${error.id}), attempting to acquire a different sfu`);
                 await this.selectProducerSfu(error.id);
-                await Promise.allSettled([
+                const promises = [
                     this.camera,
                     this.microphone,
                     this.screenshare,
                 ].flatMap(sender => {
-                    if(sender.sfuId !== error.id) { return; }
+                    if(sender.sfuId !== error.id) { return []; }
                     return sender.changeState("switching-sfu");
-                }));
+                });
+                await Promise.allSettled(promises);
             }
 
             const sfu = this.sfus.get(error.id);
