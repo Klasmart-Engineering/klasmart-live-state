@@ -64,6 +64,13 @@ export class Room {
         return [...sfuIds];
     }
 
+    public async removeSfuId(id: SfuId) {
+        const trackInfos = this.tracks().filter(t => t.sfuId === id);
+        for (const track of trackInfos) {
+            await this.removeTrackInfo(track.producerId);
+        }
+    }
+
     public async getProducerSfuId(excludeId?: SfuId) {
         if(this._producerSfuId && excludeId !== this._producerSfuId) { return this._producerSfuId; }
         this._producerSfuId = undefined;

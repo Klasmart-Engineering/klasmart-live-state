@@ -28,6 +28,7 @@ export declare class Room {
     tracks(): TrackInfo[];
     getSessionTracks(sessionId: string): TrackInfo[];
     getSfuIds(): Promise<SfuId[]>;
+    removeSfuId(id: SfuId): Promise<void>;
     getProducerSfuId(excludeId?: SfuId): Promise<SfuId>;
     private onTransportStateChange;
     private onTransportMessage;

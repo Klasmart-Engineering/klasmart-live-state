@@ -66,13 +66,12 @@ export class WebRtcManager {
     }
 
     private async onSfuConnectionError(error: SfuConnectionError) {
+        if (error.retries < 10 || !this.sfus.has(error.id)) {
+            return;
+        }
         try {
-            if (error.producerError && error.retries > 10 && this.sfus.has(error.id)) {
+            if (error.producerError) {
                 console.error(`Cannot seem to reliably connect to SFU(${error.id}), attempting to acquire a different sfu`);
-
-                const sfu = this.sfus.get(error.id);
-                await sfu?.close();
-                this.sfus.delete(error.id);
                 await this.selectProducerSfu(error.id);
                 await Promise.allSettled([
                     this.camera,
@@ -83,6 +82,11 @@ export class WebRtcManager {
                     return sender.changeState("switching-sfu");
                 }));
             }
+
+            const sfu = this.sfus.get(error.id);
+            await sfu?.close();
+            this.sfus.delete(error.id);
+            await this.room.removeSfuId(error.id);
         } catch (e) {
             console.error(e);
         }
