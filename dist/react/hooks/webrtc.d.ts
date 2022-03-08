@@ -85,5 +85,6 @@ export declare const useTrack: (location?: TrackLocation | undefined, ctx?: impo
 };
 export declare type Track = ReturnType<typeof useTrack>;
 export declare const useMediaStreamTracks: (...nextTrackSet: Array<MediaStreamTrack | null | undefined>) => MediaStream;
-export declare const useCloseWebrtc: (ctx?: import("../rtcContext").WebRtcManager) => import("react-async-hook").UseAsyncReturn<void, []>;
+export declare const useWebrtcCloseCallback: (ctx?: import("../rtcContext").WebRtcManager) => import("react-async-hook").UseAsyncReturn<void, []>;
+export declare const useWebrtcClose: (ctx?: import("../rtcContext").WebRtcManager) => import("react-async-hook").UseAsyncReturn<void, never[]>;
 //# sourceMappingURL=webrtc.d.ts.map

@@ -171,8 +171,12 @@ export const useMediaStreamTracks = (
     return stream;
 };
 
-export const useCloseWebrtc = (
+export const useWebrtcCloseCallback = (
     ctx = useContext(WebRtcContext),
 ) => useAsyncCallback(() => ctx.close());
+
+export const useWebrtcClose = (
+    ctx = useContext(WebRtcContext),
+) => useAsync(() => ctx.close(), []);
 
 const useRerender = () => useReducer(i => i + 1, 0)[1];

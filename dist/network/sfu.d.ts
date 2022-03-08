@@ -98,7 +98,6 @@ export declare class SFU {
     private readonly producers;
     private readonly consumers;
     emitter: EventEmitter<SfuEventMap, any>;
-    private closed;
     constructor(id: SfuId, url: string);
     private generateRequestId;
     getTrack(producerId: ProducerId): Promise<Producer | Consumer>;

@@ -108,7 +108,6 @@ export class SFU {
     private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
     public emitter = new EventEmitter<SfuEventMap>();
-    private closed = false;
 
     public constructor(
         public readonly id: SfuId,
@@ -160,7 +159,6 @@ export class SFU {
 
     public async close() {
         console.log(`Closing SFU ${this.id}`);
-        this.closed = true;
         this.ws.disconnect();
         this.clearRetries();
         const promises = [
@@ -305,8 +303,8 @@ export class SFU {
         case "error":
             console.info(`Transport state changed to ${state}`);
             this.retryAttempts++;
-            if (this.retryAttempts < this.retryMaxAttempts && !this.closed) {
-                console.log(`id: ${this.id} closed: ${this.closed} retries: ${this.retryAttempts}/${this.retryMaxAttempts}`);
+            if (this.retryAttempts < this.retryMaxAttempts) {
+                console.log(`id: ${this.id} retries: ${this.retryAttempts}/${this.retryMaxAttempts}`);
                 this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.hasProducers));
                 this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
             }
