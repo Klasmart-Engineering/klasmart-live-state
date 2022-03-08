@@ -1,5 +1,4 @@
 import { TrackLocation } from "../../network/room";
-import { Consumer, Producer } from "../../network/sfu";
 export declare const useWebRtcConstraints: (ctx?: import("../rtcContext").WebRtcManager) => {
     getCameraConstraints: () => boolean | MediaTrackConstraints | undefined;
     setCameraConstraints: (constraints?: MediaStreamConstraints["audio"]) => boolean | MediaTrackConstraints | undefined;
@@ -51,7 +50,7 @@ export declare function useStream(sessionId: string, name?: string | StreamNameP
         isPausedLocally: boolean;
         isPausedGlobally: boolean;
         isPausedAtSource: boolean;
-        track: Producer | Consumer | undefined;
+        track: import("../../network/sfu").Producer | import("../../network/sfu").Consumer | undefined;
         hasLocation: boolean;
     };
     video: {
@@ -65,7 +64,7 @@ export declare function useStream(sessionId: string, name?: string | StreamNameP
         isPausedLocally: boolean;
         isPausedGlobally: boolean;
         isPausedAtSource: boolean;
-        track: Producer | Consumer | undefined;
+        track: import("../../network/sfu").Producer | import("../../network/sfu").Consumer | undefined;
         hasLocation: boolean;
     };
     stream: MediaStream;
@@ -81,9 +80,10 @@ export declare const useTrack: (location?: TrackLocation | undefined, ctx?: impo
     isPausedLocally: boolean;
     isPausedGlobally: boolean;
     isPausedAtSource: boolean;
-    track: Producer | Consumer | undefined;
+    track: import("../../network/sfu").Producer | import("../../network/sfu").Consumer | undefined;
     hasLocation: boolean;
 };
 export declare type Track = ReturnType<typeof useTrack>;
 export declare const useMediaStreamTracks: (...nextTrackSet: Array<MediaStreamTrack | null | undefined>) => MediaStream;
+export declare const useCloseWebrtc: (ctx?: import("../rtcContext").WebRtcManager) => import("react-async-hook").UseAsyncReturn<void, []>;
 //# sourceMappingURL=webrtc.d.ts.map

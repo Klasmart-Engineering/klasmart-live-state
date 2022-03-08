@@ -80,6 +80,15 @@ export class Room {
         return await response;
     }
 
+    public close() {
+        this.ws.disconnect();
+        this._producerSfuId = undefined;
+        this.sessionMap.clear();
+        this.trackInfoByProducerId.clear();
+        this.emitter.emit("close");        
+    }
+
+
     private onTransportStateChange(state: TransportState) {
         switch(state) {
         case "not-connected":
@@ -139,6 +148,7 @@ export class Room {
 }
 
 export type RoomEventMap = {
+    close: () => void;
     tracksUpdated: (tracks: Map<ProducerId,TrackInfo>) => void;
     disconnected: () => void;
     sfuId: (sfuId: SfuId) => void;

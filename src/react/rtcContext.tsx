@@ -45,6 +45,13 @@ export class WebRtcManager {
         await sfu.pause(producerId, paused);
     }
 
+    public async close() {
+        await this.room.close();
+        await Promise.allSettled(
+            [...this.sfus.values()].map(s => s.close())
+        );
+    }
+
     public readonly room: Room;
 
     public constructor(

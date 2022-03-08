@@ -20,6 +20,7 @@ export declare class WebRtcManager {
     getTrack({ sfuId, producerId }: TrackLocation): Promise<import("../network/sfu").Producer | import("../network/sfu").Consumer>;
     pauseForEveryone({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
     pause({ sfuId, producerId }: TrackLocation, paused: boolean): Promise<void>;
+    close(): Promise<void>;
     readonly room: Room;
     constructor(baseEndpoint: URL, sessionId?: string | undefined, onAuthorizationInvalid?: (() => unknown) | undefined, onAuthorizationExpired?: (() => unknown) | undefined, onAuthenticationExpired?: (() => unknown) | undefined, onAuthenticationInvalid?: (() => unknown) | undefined, onTokenMismatch?: (() => unknown) | undefined, onMissingAuthenticationToken?: (() => unknown) | undefined, onMissingAuthorizationToken?: (() => unknown) | undefined);
     private onSfuConnectionError;

@@ -161,10 +161,14 @@ export class SFU {
     public async close() {
         console.log(`Closing SFU ${this.id}`);
         this.closed = true;
-        this.producers.forEach(p => p.then(p => p.close()));
-        this.consumers.forEach(c => c.then(c => c.close()));
         this.ws.disconnect();
         this.clearRetries();
+        const promises = [
+            ...this.producers.values(),
+            ...this.consumers.values(),
+        ].map(async p => (await p).close());
+        await Promise.allSettled(promises);
+
     }
 
     private clearRetries() {

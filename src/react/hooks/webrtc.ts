@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
-import { Consumer, Producer, Track as SfuTrack } from "../../network/sfu";
+import { Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { WebRtcContext } from "../rtcContext";
 
@@ -65,8 +65,8 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
         return () => senders.forEach(sender => sender.off("statechange", onUpdate));
     }, [setLocations, getTracks, sessionId]);
 
-    const audio = useTrack(audioLocation);
-    const video = useTrack(videoLocation);
+    const audio = useTrack(audioLocation, ctx);
+    const video = useTrack(videoLocation, ctx);
 
     const stream = useMediaStreamTracks(
         audio.track?.track,
@@ -170,5 +170,9 @@ export const useMediaStreamTracks = (
 
     return stream;
 };
+
+export const useCloseWebrtc = (
+    ctx = useContext(WebRtcContext),
+) => useAsyncCallback(() => ctx.close());
 
 const useRerender = () => useReducer(i => i + 1, 0)[1];

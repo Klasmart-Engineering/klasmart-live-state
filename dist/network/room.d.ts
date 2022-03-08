@@ -30,6 +30,7 @@ export declare class Room {
     getSfuIds(): Promise<SfuId[]>;
     removeSfuId(id: SfuId): Promise<void>;
     getProducerSfuId(excludeId?: SfuId): Promise<SfuId>;
+    close(): void;
     private onTransportStateChange;
     private onTransportMessage;
     private handleMessage;
@@ -40,6 +41,7 @@ export declare class Room {
     private setProducerSfuId;
 }
 export declare type RoomEventMap = {
+    close: () => void;
     tracksUpdated: (tracks: Map<ProducerId, TrackInfo>) => void;
     disconnected: () => void;
     sfuId: (sfuId: SfuId) => void;
