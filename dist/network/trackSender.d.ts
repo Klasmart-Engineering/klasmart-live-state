@@ -9,7 +9,7 @@ export declare class TrackSender {
     off: TrackSender["emitter"]["off"];
     once: TrackSender["emitter"]["once"];
     get producer(): Producer | undefined;
-    changeState(state: "sending" | "not-sending" | "switching-sfu"): Promise<void>;
+    changeState(state: "sending" | "not-sending" | "switching-sfu"): Promise<unknown>;
     get sfuId(): import("./sfu").SfuId | undefined;
     constructor(getSfu: () => Promise<SFU>, getTrack: () => Promise<MediaStreamTrack>, name: string, sessionId?: string | undefined);
     private stateSending;
