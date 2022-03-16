@@ -461,7 +461,7 @@ export class Producer extends Track {
         super(requestPauseGlobally);
         console.log("producer constructor", producer);
         producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport closed`));
-        producer.on("trackended", () => console.log(`Producer(${producer.id}) ended`));
+        producer.on("trackended", async () => await this.pause(true));
     }
 
     private async pause(paused: boolean) {
@@ -506,7 +506,7 @@ export class Consumer extends Track {
         super(requestPauseGlobally);
         console.log("consumer constructor");
         consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s transport closed`));
-        consumer.on("trackended", () => console.log(`Consumer(${consumer.id}) ended`));
+        consumer.on("trackended", async () => await this.pause(true));
     }
 
     private async pause(paused: boolean) {
