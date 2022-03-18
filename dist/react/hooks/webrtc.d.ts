@@ -9,7 +9,7 @@ export declare const useWebRtcConstraints: (ctx?: import("../rtcContext").WebRtc
 };
 export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
-    setSending: import("react-async-hook").UseAsyncReturn<void, [send: boolean]>;
+    setSending: import("react-async-hook").UseAsyncReturn<unknown, [send: boolean]>;
     globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
@@ -18,7 +18,7 @@ export declare const useCamera: (ctx?: import("../rtcContext").WebRtcManager) =>
 };
 export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
-    setSending: import("react-async-hook").UseAsyncReturn<void, [send: boolean]>;
+    setSending: import("react-async-hook").UseAsyncReturn<unknown, [send: boolean]>;
     globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;
@@ -27,7 +27,7 @@ export declare const useMicrophone: (ctx?: import("../rtcContext").WebRtcManager
 };
 export declare const useScreenshare: (ctx?: import("../rtcContext").WebRtcManager) => {
     track: MediaStreamTrack | null | undefined;
-    setSending: import("react-async-hook").UseAsyncReturn<void, [send: boolean]>;
+    setSending: import("react-async-hook").UseAsyncReturn<unknown, [send: boolean]>;
     globalPause: import("react-async-hook").UseAsyncReturn<void | import("../../network/sfu").Result | undefined, [paused: boolean]>;
     isConsumable: boolean;
     isPausedLocally: boolean;

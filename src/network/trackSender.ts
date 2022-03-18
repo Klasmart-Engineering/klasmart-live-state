@@ -11,8 +11,8 @@ export class TrackSender {
     public get producer() { return this._producer; }
 
     public async changeState(state: "sending" | "not-sending" | "switching-sfu") {
-        while(this.stateChange) { await this.stateChange; }
-        return this.stateChange = new Promise<void>(r => {
+        while(this.stateChange) { await this.stateChange.catch(() => true); }
+        return this.stateChange = new Promise<unknown>(resolve => {
             let promise: Promise<unknown> | undefined;
             switch(state) {
             case "sending":
@@ -28,10 +28,8 @@ export class TrackSender {
                 console.error(`Unhandled TrackSenderState(${state})`);
                 promise = Promise.resolve();
             }
-            promise.finally(() => {
-                this.stateChange = undefined;
-                r();
-            });
+            resolve(promise);
+            promise.finally(() => this.stateChange = undefined);
         });
     }
 
