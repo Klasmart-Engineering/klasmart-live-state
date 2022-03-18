@@ -42,7 +42,7 @@ export class WSTransport {
 
     public async send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
         let ws = this.ws;
-        if (!ws) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
             if (!this.autoconnect) {
                 throw new Error("Not connected");
             }
@@ -55,7 +55,7 @@ export class WSTransport {
     private ws?: WebSocket;
     private _wsPromise?: Promise<WebSocket>;
     private async _connect() {
-        if (!this._wsPromise || this.ws?.readyState === WebSocket.CLOSED) {
+        if (!this._wsPromise || this.ws?.readyState === WebSocket.CLOSED || this.ws?.readyState === WebSocket.CLOSING) {
             this._wsPromise = new Promise<WebSocket>((resolve, reject) => {
                 const ws = new WebSocket(this.url, this.protocols);
                 ws.binaryType = "arraybuffer";
