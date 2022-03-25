@@ -1,6 +1,6 @@
 {
   "name": "kidsloop-live-state",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "",
   "main": "dist/ui.js",
   "types": "dist/ui.d.ts",
