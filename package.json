@@ -1,5 +1,5 @@
 {
-  "name": "kidsloop-live-state",
+  "name": "@kl-engineering/live-state",
   "version": "1.4.1",
   "description": "",
   "main": "dist/ui.js",
@@ -83,6 +83,13 @@
     "ts-node": "^10.2.1",
     "typescript": "^4.5.2",
     "uuid": "^3.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KL-Engineering/kidsloop-live-state.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "config": {
     "commitizen": {
