@@ -9,13 +9,18 @@ module.exports = {
         "plugin:react/recommended",
         "plugin:@typescript-eslint/recommended"
     ],
+    "settings": {
+        "react": {
+            "version": "detect",
+        },
+    },
     "parser": "@typescript-eslint/parser",
     "parserOptions": {
         "ecmaFeatures": {
             "jsx": true
         },
         "ecmaVersion": 13,
-        "sourceType": "module"
+        "sourceType": "module",
     },
     "plugins": [
         "react",
