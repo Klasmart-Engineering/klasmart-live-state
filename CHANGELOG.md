@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.4.2](https://github.com/KL-Engineering/kidsloop-live-state/compare/v1.4.1...v1.4.2) (2022-03-25)
+
+
+### 🐛 Bug Fixes
+
+* add remaining files for github migration ([732bf92](https://github.com/KL-Engineering/kidsloop-live-state/commit/732bf9257b7eebf1a45016959f6306b840adb1ee))
+
 ### [1.4.1](https://bitbucket.org/calmisland/kidsloop-live-state/compare/v1.4.0...v1.4.1) (2022-03-25)
 
 
