@@ -44,6 +44,7 @@ type ConsumeTrackRequest = { producerId: ProducerId };
 type PauseRequest = { paused: boolean, id: ProducerId };
 
 export type ResponseMessage = {
+    clientId?: ClientId,
     response?: Response,
 
     pausedSource?: PauseEvent,
@@ -94,6 +95,9 @@ export type PauseEvent = {
     producerId: ProducerId,
     paused: boolean
 }
+
+export type ClientId = NewType<string, "ClientId">;
+export function newClientId(id: string) { return id as ClientId; }
 
 export class SFU {
     private _requestId = 0;
@@ -352,6 +356,9 @@ export class SFU {
 
     private async handleMessage(message: ResponseMessage) {
         try {
+            if (message.clientId) {
+                this.ws.setClientId(message.clientId);
+            }
             if (message.response) { this.response(message.response); }
 
             if (message.pausedSource) { await this.onSourcePaused(message.pausedSource); }

@@ -1,3 +1,5 @@
+import {ClientId} from "./sfu";
+
 type Timeout = ReturnType<typeof setTimeout>;
 
 export type TransportState =
@@ -11,16 +13,16 @@ export class WSTransport {
 
     constructor(
     /* eslint-disable no-unused-vars */
-    private readonly url: string,
-    private readonly onMessageCallback: (
-      transport: WSTransport,
-      data: string | ArrayBuffer | Blob
-    ) => unknown,
-    private readonly onStateChange?: (state: TransportState) => unknown,
-    private readonly protocols: string[] | undefined = undefined,
-    private autoconnect = true,
-    private receiveMessageTimeoutTime: number|null = 5000,
-    private sendKeepAliveMessageInterval:number|null = 1000 /* eslint-enable no-unused-vars */
+        private readonly url: string,
+        private readonly onMessageCallback: (
+          transport: WSTransport,
+          data: string | ArrayBuffer | Blob
+        ) => unknown,
+        private readonly onStateChange?: (state: TransportState) => unknown,
+        private protocols: string[] = [],
+        private autoconnect = true,
+        private receiveMessageTimeoutTime: number|null = 5000,
+        private sendKeepAliveMessageInterval:number|null = 1000, /* eslint-enable no-unused-vars */
     ) {}
 
     public async connect() {
@@ -50,6 +52,11 @@ export class WSTransport {
         }
         ws.send(data);
         this.resetNetworkSendTimeout();
+    }
+
+    public setClientId(clientId: ClientId) {
+        this.protocols = this.protocols.filter(p => !p.startsWith("clientId"));
+        this.protocols.push(`clientId${clientId}`);
     }
 
     private ws?: WebSocket;
