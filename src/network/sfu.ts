@@ -362,9 +362,7 @@ export class SFU {
 
     private async handleMessage(message: ResponseMessage) {
         try {
-            if (message.clientId) {
-                this.ws.setClientId(message.clientId);
-            }
+            if (message.clientId) { this.setClientId(message.clientId); }
             if (message.response) { this.response(message.response); }
 
             if (message.pausedSource) { await this.onSourcePaused(message.pausedSource); }
@@ -375,6 +373,13 @@ export class SFU {
         } catch(e) {
             console.warn(e);
         }
+    }
+
+    private setClientId(clientId: ClientId) {
+        this.ws.protocols = [
+            ...this.ws.protocols.filter(p => !p.startsWith("clientId")),
+            `clientId${clientId}`,
+        ];
     }
 
     private response(response: Response) {

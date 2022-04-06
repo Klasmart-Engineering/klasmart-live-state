@@ -19,7 +19,7 @@ export class WSTransport {
           data: string | ArrayBuffer | Blob
         ) => unknown,
         private readonly onStateChange?: (state: TransportState) => unknown,
-        private protocols: string[] = [],
+        public protocols: string[] = [],
         private autoconnect = true,
         private receiveMessageTimeoutTime: number|null = 5000,
         private sendKeepAliveMessageInterval:number|null = 1000, /* eslint-enable no-unused-vars */
@@ -52,11 +52,6 @@ export class WSTransport {
         }
         ws.send(data);
         this.resetNetworkSendTimeout();
-    }
-
-    public setClientId(clientId: ClientId) {
-        this.protocols = this.protocols.filter(p => !p.startsWith("clientId"));
-        this.protocols.push(`clientId${clientId}`);
     }
 
     private ws?: WebSocket;
