@@ -29,10 +29,6 @@ export class WebRtcManager {
         this.sessionId,
     );
 
-    public async getTrack({sfuId, producerId}: TrackLocation) {
-        return await this.sfu(sfuId).getTrack(producerId);
-    }
-
     public async pauseForEveryone({sfuId, producerId}: TrackLocation, paused: boolean) {
         const sfu = this.sfus.get(sfuId);
         if(!sfu) {throw new Error(`Not connected to SFU(${sfuId})`); }
@@ -182,7 +178,7 @@ export class WebRtcManager {
 
     private readonly sfus = new Map<SfuId, SFU>();
 
-    private sfu(id: SfuId) {
+    public sfu(id: SfuId) {
         let sfu = this.sfus.get(id);
         if (!sfu) {
             const url = this.getSfuUrl(id);

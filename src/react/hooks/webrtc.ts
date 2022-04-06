@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
-import { Track as SfuTrack } from "../../network/sfu";
+import { ProducerId, Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { WebRtcContext } from "../rtcContext";
 
@@ -86,8 +86,22 @@ export const useTrack = (
 ) => {
     const {
         currentPromise: trackPromise,
-        result: track
-    } = useAsync(async (l?: TrackLocation) => l && (await ctx.getTrack(l)), [location]);
+        result: track,
+        execute,
+    } = useAsync(async (location?: TrackLocation) => {
+        if(!location) { return; }
+        const {sfuId, producerId} = location;
+        return ctx.sfu(sfuId).getTrack(producerId);
+    }, [location]);
+
+    useEffect(() => {
+        if(!location) { return; }
+        const {sfuId, producerId} = location;
+        const sfu = ctx.sfu(sfuId);
+        const callback = () => execute(location);
+        sfu.onTrackUpdate(producerId, callback);
+        return () => { sfu.offTrackUpdate(producerId, callback); };
+    });
 
     const start = useAsyncCallback(async () => (await trackPromise)?.start());
     const stop = useAsyncCallback(async () => (await trackPromise)?.stop());

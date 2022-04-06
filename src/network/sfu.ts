@@ -112,6 +112,10 @@ export class SFU {
     private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
     public emitter = new EventEmitter<SfuEventMap>();
+    
+    public onTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.on(id, () => f(id)); };
+    public offTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.off(id, () => f(id)); };
+    private trackUpdateEmitter = new EventEmitter<Record<ProducerId,[]>>();
 
     public constructor(
         public readonly id: SfuId,
@@ -154,6 +158,7 @@ export class SFU {
         if(this.producers.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
         const consumerPromise = this.createConsumer(producerId);
         this.consumers.set(producerId, consumerPromise);
+        this.trackUpdateEmitter.emit(producerId);
         return await consumerPromise;
     }
 
@@ -272,6 +277,7 @@ export class SFU {
                 if(!id) { return error("Malformed response from SFU"); }
                 const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
                 this.producers.set(id, producerPromise);
+                this.trackUpdateEmitter.emit(id);
                 producerPromise.then(p => p.pausedGlobally = producerCreated.pausedGlobally);
                 callback({id});
             } catch(e) {
@@ -389,13 +395,14 @@ export class SFU {
     }
 
     private async onSourcePaused({ producerId, paused }: PauseEvent) {
+        console.log(`Producer(${producerId}): Source pause (${producerId},${paused})`);
         const consumer = await this.consumers.get(producerId);
         if(consumer) { consumer.pausedAtSource = paused; }
     }
 
     private async onGloballyPaused({ producerId, paused }: PauseEvent) {
+        console.log(`Producer(${producerId}): Global pause (${producerId},${paused})`);
         const producer = await this.producers.get(producerId);
-        console.log(`Producer(${producer?.id}): Global pause (${producerId},${paused})`);
         if(producer) { producer.pausedGlobally = paused; }
 
         const consumer = await this.consumers.get(producerId);
@@ -467,8 +474,8 @@ export class Producer extends Track {
     ) {
         super(requestPauseGlobally);
         console.log("producer constructor", producer);
-        producer.on("transportclose", () => console.log(`Producer(${producer.id})'s Transport closed`));
-        producer.on("trackended", async () => await this.pause(true));
+        producer.on("transportclose", () => this.stop());
+        producer.on("trackended", () => this.stop());
     }
 
     private async pause(paused: boolean) {
@@ -495,7 +502,6 @@ export class Consumer extends Track {
     protected _pausedAtSource?: boolean;
     public get pausedAtSource() { return this._pausedAtSource; }
     public set pausedAtSource(paused: boolean | undefined) {
-        console.log("consumer set pausedAtSource", paused);
         if(this._pausedAtSource === paused) { return; }
         this._pausedAtSource = paused;
         this.emitter.emit("pausedAtSource", paused);
@@ -511,9 +517,8 @@ export class Consumer extends Track {
         requestPauseGlobally: (paused: boolean) => Promise<void|Result>,
     ) {
         super(requestPauseGlobally);
-        console.log("consumer constructor");
-        consumer.on("transportclose", () => console.log(`Consumer(${consumer.id})'s transport closed`));
-        consumer.on("trackended", async () => await this.pause(true));
+        consumer.on("transportclose", () => this.pause(true));
+        consumer.on("trackended", () => this.pause(true));
     }
 
     private async pause(paused: boolean) {
