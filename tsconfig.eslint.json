@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "**/.*.cjs",
+    "**/.*.js",
+    "**/*.ts",
+    "**/*.js",
+  ],
+  "exclude": [
+    "dist",
+    "src/protobuf/index.d.ts",
+    "src/protobuf/index.js"
+  ]
+}

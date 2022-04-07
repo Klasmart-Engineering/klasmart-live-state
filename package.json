@@ -27,7 +27,7 @@
     "protobuf-js": "pbjs -w commonjs -t static-module -o src/protobuf/index.js protobuf/network.proto;",
     "protobuf-ts": "pbts -o src/protobuf/index.d.ts src/protobuf/index.js",
     "release": "standard-version",
-    "lint": "eslint --fix src/**/*.{ts,js}",
+    "lint": "eslint .",
     "test": "jest",
     "prepare": "husky install"
   },
