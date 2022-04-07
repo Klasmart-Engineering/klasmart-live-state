@@ -1,5 +1,3 @@
-import {ClientId} from "./sfu";
-
 type Timeout = ReturnType<typeof setTimeout>;
 
 export type TransportState =
