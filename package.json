@@ -1,6 +1,6 @@
 {
   "name": "@kl-engineering/live-state",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "",
   "main": "dist/ui.js",
   "types": "dist/ui.d.ts",
