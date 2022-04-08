@@ -4,6 +4,7 @@ import {TransportState, WSTransport} from "../network/websocketTransport";
 import {PromiseCompleter} from "../network/promiseCompleter";
 import {Memoize} from "../memoize";
 import EventEmitter from "eventemitter3";
+import { BuiltinHandlerName } from "mediasoup-client/lib/Device";
 
 export type SfuId = NewType<string, "sfuId">
 export const newSfuID = (id: string) => id as SfuId;
@@ -101,7 +102,13 @@ export function newClientId(id: string) { return id as ClientId; }
 
 export class SFU {
     private _requestId = 0;
-    private readonly device = new Device();
+    /** 
+     * SFU-68: Camera is turned off by default and can not turn on even though permissions are enabled.
+     * Have to add the handleName "Safari12" to solve the issue "UnsupportedError, device is not supported" on Cordova iOS.
+     * The WEBRTC_DEVICE_HANDLER_NAME would be got from kidsloop-live-frontend while building.
+     * Refer: https://githubhot.com/repo/versatica/mediasoup-client/issues/188
+    */
+    private readonly device = new Device({handlerName: process.env["WEBRTC_DEVICE_HANDLER_NAME"] as BuiltinHandlerName});
     private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>();
     private readonly ws: WSTransport;
     private retryDelay = 1000;
