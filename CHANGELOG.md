@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/KL-Engineering/kidsloop-live-state/branches/compare/v1.5.0%0Dv1.4.5) (2022-04-19)
+
+
+### ✨ Features
+
+* allow WebRtcManager to be reinstantiated for when parameters change (#11) ([1bcb61d](https://github.com/KL-Engineering/kidsloop-live-state/commits/1bcb61db0e712b41335e20c4cb702e3049d4188b))
+
 ### [1.4.5](https://github.com/KL-Engineering/kidsloop-live-state/branches/compare/v1.4.5%0Dv1.4.4) (2022-04-11)
 
 
