@@ -1,6 +1,6 @@
 name: Publish
 
-concurrency: 
+concurrency:
     group: Publish
     cancel-in-progress: true
 
@@ -30,7 +30,7 @@ jobs:
             upload: true
 
     confirm-publish:
-        needs: [lint, build]
+        needs: [build]
         runs-on: ubuntu-latest
         environment: latest
         steps:

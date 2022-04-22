@@ -1,6 +1,6 @@
 {
   "name": "@kl-engineering/live-state",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "description": "",
   "main": "dist/ui.js",
   "types": "dist/ui.d.ts",
@@ -27,7 +27,7 @@
     "protobuf-js": "pbjs -w commonjs -t static-module -o src/protobuf/index.js protobuf/network.proto;",
     "protobuf-ts": "pbts -o src/protobuf/index.d.ts src/protobuf/index.js",
     "release": "standard-version",
-    "lint": "eslint --fix src/**/*.{ts,js}",
+    "lint": "eslint .",
     "test": "jest",
     "prepare": "husky install"
   },

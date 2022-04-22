@@ -1,0 +1,6 @@
+dist
+src/protobuf/index.d.ts
+src/protobuf/index.js
+!.*.js
+!.*.cjs
+!.*.ts

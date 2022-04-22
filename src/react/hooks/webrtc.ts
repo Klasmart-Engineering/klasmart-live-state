@@ -1,7 +1,7 @@
-import { useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
+import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
-import { ProducerId, Track as SfuTrack } from "../../network/sfu";
+import { Track as SfuTrack } from "../../network/sfu";
 import { TrackSender } from "../../network/trackSender";
 import { WebRtcContext } from "../rtcContext";
 
@@ -35,7 +35,8 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
     const audioName = typeof name === "string" ? `${name}-audio` : name?.audio ?? "microphone";
     const videoName = typeof name === "string" ? `${name}-video` : name?.video ?? "camera";
 
-    const getTracks = useCallback(
+    const [renderCount, rerender] = useReducer(i => i+1,0);
+    const {audioLocation, videoLocation} = useMemo(
         () => {
             const tracks = ctx.room.getSessionTracks(sessionId);
             return {
@@ -43,27 +44,13 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
                 videoLocation: tracks.find(t => t.name === videoName),
             };
         },
-        [ctx, sessionId, audioName, videoName],
+        [ctx, sessionId, audioName, videoName, renderCount],
     );
-    const [{audioLocation, videoLocation}, setLocations] = useState(getTracks);
+
     useEffect(() => {
-        const onUpdate = () => setLocations(getTracks);
-        ctx.room.on("tracksUpdated", onUpdate);
-        return () => { ctx.room.off("tracksUpdated", onUpdate);};
-    }, [setLocations, getTracks, ctx.room]);
-    
-    useEffect(() => {
-        // This useEffect should be removed once there is time to refactor
-        if(sessionId !== ctx.sessionId) { return; }
-        const onUpdate = () => setLocations(getTracks);
-        const senders = [
-            ctx.camera,
-            ctx.microphone,
-            ctx.screenshare,
-        ];
-        senders.forEach(sender => sender.on("statechange", onUpdate));
-        return () => senders.forEach(sender => sender.off("statechange", onUpdate));
-    }, [setLocations, getTracks, sessionId]);
+        ctx.room.on("tracksUpdated", rerender);
+        return () => { ctx.room.off("tracksUpdated", rerender);};
+    }, [ctx.room]);
 
     const audio = useTrack(audioLocation, ctx);
     const video = useTrack(videoLocation, ctx);
