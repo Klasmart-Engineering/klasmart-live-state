@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useMemo } from "react";
+import React, { ReactNode, useMemo } from "react";
 import { WebRtcContext, WebRtcManager } from "./rtcContext";
 export interface WebRtcProviderProps {
     children?: ReactNode;
@@ -25,19 +25,7 @@ export function WebRtcProvider({
     onMissingAuthenticationToken,
     onMissingAuthorizationToken,
 }: WebRtcProviderProps) {
-    const value = useMemo(() => {
-        return new WebRtcManager(
-            endpoint,
-            sessionId,
-            onAuthorizationInvalid,
-            onAuthorizationExpired,
-            onAuthenticationInvalid,
-            onAuthenticationExpired,
-            onTokenMismatch,
-            onMissingAuthenticationToken,
-            onMissingAuthorizationToken,
-        );
-    }, [
+    const value = useMemo(() => new WebRtcManager(
         endpoint,
         sessionId,
         onAuthorizationInvalid,
@@ -46,9 +34,7 @@ export function WebRtcProvider({
         onAuthenticationExpired,
         onTokenMismatch,
         onMissingAuthenticationToken,
-        onMissingAuthorizationToken,
-    ]);
-    useEffect(() => () => { value.close(); }, [value]);
+        onMissingAuthorizationToken), []);
     return (
         <WebRtcContext.Provider value={value}>
             {children}
