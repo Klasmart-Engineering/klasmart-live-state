@@ -49,7 +49,7 @@ export class Room {
         );
     }
 
-    public tracks() { return [...this.trackInfoByProducerId.values()]; }
+    public tracks(): TrackInfo[] { return [...this.trackInfoByProducerId.values()]; }
 
     public getSessionTracks(sessionId: string): TrackInfo[] {
         this.ws.connect().catch((e) =>  console.error(e));
