@@ -1,9 +1,17 @@
-import { Producer, SFU } from "./sfu";
+import { SFU } from "./sfu";
 import {EventEmitter} from "eventemitter3";
+import {Producer} from "./track";
 
 export type TrackSenderState = "sending" | "not-sending"
 
 export class TrackSender {
+    public constructor (
+        private readonly getSfu: () => Promise<SFU>,
+        private readonly getTrack: () => Promise<MediaStreamTrack>,
+        private readonly name: string,
+        private readonly sessionId?: string,
+    ) {}
+
     public on: TrackSender["emitter"]["on"] = (event, callback) => this.emitter.on(event, callback);
     public off: TrackSender["emitter"]["off"] = (event, callback) => this.emitter.off(event, callback);
     public once: TrackSender["emitter"]["once"] = (event, callback) => this.emitter.once(event, callback);
@@ -37,13 +45,6 @@ export class TrackSender {
     public get sfuId() {
         return this.sfu?.id;
     }
-
-    public constructor (
-        private readonly getSfu: () => Promise<SFU>,
-        private readonly getTrack: () => Promise<MediaStreamTrack>,
-        private readonly name: string,
-        private readonly sessionId?: string,
-    ) {}
 
     private async stateSending() {
         try {

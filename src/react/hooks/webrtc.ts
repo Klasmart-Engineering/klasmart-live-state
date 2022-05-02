@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
-import { Track as SfuTrack } from "../../network/sfu";
+import { Track as SfuTrack } from "../../network/track";
 import { TrackSender } from "../../network/trackSender";
 import { WebRtcContext } from "../rtcContext";
 
@@ -165,7 +165,7 @@ export const useMediaStreamTracks = (
 ) => {
     const stream = useMemo(() => new MediaStream(), []);
     const previousTrackSet = new Set(stream.getTracks());
-    
+
     for(const track of nextTrackSet) {
         if(!track || track.readyState !== "live") { continue; }
         const isNewTrack = !previousTrackSet.delete(track);
