@@ -7,6 +7,7 @@ import EventEmitter from "eventemitter3";
 import { BuiltinHandlerName } from "mediasoup-client/lib/Device";
 import {Consumer, Producer} from "./track";
 import { RtpEncodingParameters } from "mediasoup-client/lib/RtpParameters";
+import {Mutex} from "async-mutex";
 
 export type SfuId = NewType<string, "sfuId">
 export const newSfuID = (id: string) => id as SfuId;
@@ -123,9 +124,13 @@ export class SFU {
     private retryMaxAttempts = 30;
     private retryTimer?: NodeJS.Timeout;
     private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
+    private _producerTransport?: MediaSoup.Transport;
+    private _consumerTransport?: MediaSoup.Transport;
     private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
     public emitter = new EventEmitter<SfuEventMap>();
+    private readonly producerTransportLock = new Mutex();
+    private readonly consumerTransportLock = new Mutex();
 
     public onTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.on(id, () => f(id)); };
     public offTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.off(id, () => f(id)); };
@@ -227,6 +232,7 @@ export class SFU {
             getParameters,
             (paused: boolean) => this.pause(producer.id, paused),
             (paused: boolean) => this.pauseGlobally(producer.id, paused),
+            producerTransport
         );
         const resolver = this.producerResolvers.get(producer.id);
         if(resolver) {
@@ -251,6 +257,7 @@ export class SFU {
             consumer,
             (paused: boolean) => this.pause(producerId, paused),
             (paused: boolean) => this.pauseGlobally(producerId, paused),
+            consumerTransport
         );
     }
 
@@ -262,7 +269,22 @@ export class SFU {
         return await this.request({pause: {id, paused}});
     }
 
-    private consumerTransport = Memoize(async () => {
+    private async consumerTransport() {
+        return await this.consumerTransportLock.runExclusive(async () => {
+            // Check transport status, return existing transport if it's ok
+            if ((this._consumerTransport && this._consumerTransport.connectionState === "connected") ||
+                (this._consumerTransport && this._consumerTransport.connectionState === "connecting") ||
+                (this._consumerTransport && this._consumerTransport.connectionState === "new")) {
+                return this._consumerTransport;
+            }
+            // Transport state not ok, create new consumer transport
+            const transport = await this.createConsumerTransport();
+            this._consumerTransport = transport;
+            return transport;
+        });
+    }
+
+    private async createConsumerTransport() {
         await this.loadDevice();
         const response = await this.request({ createConsumerTransport: {} });
         if (!response) { throw new Error("Empty response from SFU"); }
@@ -272,9 +294,24 @@ export class SFU {
         const transport = this.device.createRecvTransport(consumerTransportCreated);
         transport.on("connect", ({ dtlsParameters }, success, error) => this.request({ connectConsumerTransport: { dtlsParameters } }).then(success, error));
         return transport;
-    });
+    }
 
-    private producerTransport = Memoize(async () => {
+    private async producerTransport() {
+        return await this.producerTransportLock.runExclusive(async () => {
+            // Check transport status, return existing transport if it's ok
+            if ((this._producerTransport && this._producerTransport.connectionState === "connected") ||
+                (this._producerTransport && this._producerTransport.connectionState === "connecting") ||
+                (this._producerTransport && this._producerTransport.connectionState === "new")) {
+                return this._producerTransport;
+            }
+            // Transport state not ok, create new producer transport
+            const transport = await this.createProducerTransport();
+            this._producerTransport = transport;
+            return transport;
+        });
+    }
+
+    private async createProducerTransport() {
         await this.loadDevice();
         const result = await this.request({ createProducerTransport: {} });
         if (!result) { throw new Error("Empty response from SFU"); }
@@ -301,8 +338,7 @@ export class SFU {
             }
         });
         return transport;
-    });
-
+    }
 
     private sendRtpCapabilities = Memoize(async () => {
         await this.request({ setRtpCapabilities: this.device.rtpCapabilities });

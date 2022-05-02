@@ -3,6 +3,13 @@ import {types as MediaSoup} from "mediasoup-client";
 import {newProducerID, ProducerId, ProducerParameters, Result} from "./sfu";
 
 export abstract class Track {
+    protected _pausedGlobally?: boolean;
+    protected readonly emitter = new EventEmitter<TrackEventMap>();
+    protected constructor(
+        public readonly requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>,
+        protected readonly transport: MediaSoup.Transport
+    ) { }
+
     public abstract get id(): ProducerId;
     public abstract get kind(): "audio" | "video" | undefined;
     public abstract get track(): MediaStreamTrack | null | undefined;
@@ -15,7 +22,6 @@ export abstract class Track {
     public abstract get pausedLocally(): boolean
     public abstract get pausedAtSource(): boolean | undefined
 
-    protected _pausedGlobally?: boolean;
     public get pausedGlobally() { return this._pausedGlobally; }
     public set pausedGlobally(pause: boolean | undefined) {
         console.log("consumer set pausedGlobally", pause);
@@ -26,11 +32,6 @@ export abstract class Track {
 
     public readonly on: EventEmitter<TrackEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
     public readonly off: EventEmitter<TrackEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
-    protected readonly emitter = new EventEmitter<TrackEventMap>();
-
-    protected constructor(
-        public readonly requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>
-    ) { }
 }
 
 export class Producer extends Track {
@@ -38,12 +39,25 @@ export class Producer extends Track {
         private readonly producer: MediaSoup.Producer,
         private readonly getParameters: () => Promise<ProducerParameters>,
         private notifyPause: (paused: boolean) => Promise<void|Result>,
-        requestPauseGlobally: (paused: boolean) => Promise<void|Result>
+        requestPauseGlobally: (paused: boolean) => Promise<void|Result>,
+        transport: MediaSoup.Transport
     ) {
-        super(requestPauseGlobally);
+        super(requestPauseGlobally, transport);
         console.log("producer constructor", producer);
         producer.on("transportclose", () => this.stop());
         producer.on("trackended", () => this.stop());
+        transport.on("connectionstatechange", async (state) => {
+            console.log(`Producer connectionstatechange: ${state}`);
+            if (state === "disconnected" || state === "failed" || state === "closed") {
+                await this.stop();
+                await this.close();
+            }
+        });
+        transport.observer.on("close", async () => {
+            console.log("Producer transport close");
+            await this.stop();
+            await this.close();
+        });
     }
 
     public get id() { return newProducerID(this.producer.id); }
@@ -67,7 +81,10 @@ export class Producer extends Track {
         await this.pause(true);
     }
 
-    public close() { this.producer.close(); }
+    public close() {
+        this.producer.close();
+        this.emitter.emit("close");
+    }
 
     private async pause(paused: boolean) {
         await Promise.allSettled([
@@ -91,10 +108,23 @@ export class Consumer extends Track {
         private consumer: MediaSoup.Consumer,
         private notifyPause: (paused: boolean) => Promise<void|Result>,
         requestPauseGlobally: (paused: boolean) => Promise<void|Result>,
+        transport: MediaSoup.Transport
     ) {
-        super(requestPauseGlobally);
+        super(requestPauseGlobally, transport);
         consumer.on("transportclose", () => this.pause(true));
         consumer.on("trackended", () => this.pause(true));
+        transport.on("connectionstatechange", async (state) => {
+            console.log(`Consumer connectionstatechange: ${state}`);
+            if (state === "disconnected" || state === "failed" || state === "closed") {
+                await this.stop();
+                await this.close();
+            }
+        });
+        transport.observer.on("close", async () => {
+            console.log("Consumer transport close");
+            await this.stop();
+            await this.close();
+        });
     }
 
     public get id() {
@@ -119,7 +149,10 @@ export class Consumer extends Track {
     public async stop() {
         await this.pause(true);
     }
-    public close() { this.consumer.close(); }
+    public close() {
+        this.consumer.close();
+        this.emitter.emit("close");
+    }
 
     private async pause(paused: boolean) {
         if (this.pauseTimer && this.pendingPauseStatus !== undefined && paused !== this.pendingPauseStatus) {
