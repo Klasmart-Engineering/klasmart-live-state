@@ -1,10 +1,11 @@
 import React from "react";
-import { TrackSender } from "../network/trackSender";
+import {TrackSender} from "../network/trackSender";
 import {SFU, SfuId, SfuAuthErrors, SfuConnectionError} from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
 
 
 export class WebRtcManager {
+    public readonly room: Room;
     public microphoneConstraints?: MediaStreamConstraints["audio"];
     public readonly microphone = new TrackSender(
         () => this.selectProducerSfu(),
@@ -29,6 +30,24 @@ export class WebRtcManager {
         this.sessionId,
     );
 
+    public constructor(
+        public readonly baseEndpoint: URL,
+        public readonly sessionId?: string,
+        private onAuthorizationInvalid?: () => unknown,
+        private onAuthorizationExpired?: () => unknown,
+        private onAuthenticationExpired?: () => unknown,
+        private onAuthenticationInvalid?: () => unknown,
+        private onTokenMismatch?: () => unknown,
+        private onMissingAuthenticationToken?: () => unknown,
+        private onMissingAuthorizationToken?: () => unknown
+    ) {
+        if(baseEndpoint.protocol === "https:") { baseEndpoint.protocol = "wss:"; }
+        if(baseEndpoint.protocol === "http:") { baseEndpoint.protocol = "ws:"; }
+        const wsEndpoint = new URL(baseEndpoint.toString());
+        wsEndpoint.pathname += "room";
+        this.room = new Room(wsEndpoint.toString());
+    }
+
     public async pauseForEveryone({sfuId, producerId}: TrackLocation, paused: boolean) {
         const sfu = this.sfus.get(sfuId);
         if(!sfu) {throw new Error(`Not connected to SFU(${sfuId})`); }
@@ -46,26 +65,6 @@ export class WebRtcManager {
         await Promise.allSettled(
             [...this.sfus.values()].map(s => s.close())
         );
-    }
-
-    public readonly room: Room;
-
-    public constructor(
-        public readonly baseEndpoint: URL,
-        public readonly sessionId?: string,
-        private onAuthorizationInvalid?: () => unknown,
-        private onAuthorizationExpired?: () => unknown,
-        private onAuthenticationExpired?: () => unknown,
-        private onAuthenticationInvalid?: () => unknown,
-        private onTokenMismatch?: () => unknown,
-        private onMissingAuthenticationToken?: () => unknown,
-        private onMissingAuthorizationToken?: () => unknown
-    ) {
-        if(baseEndpoint.protocol === "https:") { baseEndpoint.protocol = "wss:"; }
-        if(baseEndpoint.protocol === "http:") { baseEndpoint.protocol = "ws:"; }
-        const wsEndpoint = new URL(baseEndpoint.toString());
-        wsEndpoint.pathname += "room";
-        this.room = new Room(wsEndpoint.toString());
     }
 
     private async onSfuConnectionError(error: SfuConnectionError) {

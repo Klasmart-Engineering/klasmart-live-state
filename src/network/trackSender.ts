@@ -2,16 +2,32 @@ import { ProducerParameters, SFU } from "./sfu";
 import {EventEmitter} from "eventemitter3";
 import {Producer} from "./track";
 import { RtpEncodingParameters } from "mediasoup-client/lib/RtpParameters";
+import {Mutex} from "async-mutex";
 
-export type TrackSenderState = "sending" | "not-sending"
+export type TrackSenderState = "sending" | "not-sending" | "error" | "switching-sfu" | "creating";
 
 export class TrackSender {
+    private stateChangeLock = new Mutex();
+    private state: TrackSenderState = "not-sending";
+    private _producer?: Producer;
+    private sfu?: SFU;
+    private emitter = new EventEmitter<{
+        statechange: [TrackSenderState]
+    }>();
+
     public constructor (
         private readonly getSfu: () => Promise<SFU>,
         private readonly getTrack: () => Promise<MediaStreamTrack>,
         private readonly name: string,
         private readonly sessionId?: string,
-    ) {}
+    ) {
+        this.on("statechange", async (state: TrackSenderState) => {
+            if (this.state === state) {
+                return;
+            }
+            await this.changeState(state);
+        });
+    }
 
     public on: TrackSender["emitter"]["on"] = (event, callback) => this.emitter.on(event, callback);
     public off: TrackSender["emitter"]["off"] = (event, callback) => this.emitter.off(event, callback);
@@ -19,29 +35,26 @@ export class TrackSender {
 
     public get producer() { return this._producer; }
 
-    public async changeState(state: "sending" | "not-sending" | "switching-sfu") {
-        while(this.stateChange) { await this.stateChange.catch(() => true); }
-        return this.stateChange = new Promise<unknown>(resolve => {
-            let promise: Promise<unknown> | undefined;
+    public async changeState(state: TrackSenderState) {
+        return await this.stateChangeLock.runExclusive(async () =>{
+            console.log(`changeState: ${state}`);
+            this.state = state;
             switch(state) {
             case "sending":
-                promise = this.stateSending();
-                break;
+                return await this.sending();
             case "not-sending":
-                promise = this.stateNotSending();
-                break;
+                return await this.notSending();
             case "switching-sfu":
-                promise = this.stateSwitchSfu();
-                break;
+                return await this.switchSfu();
+            case "error":
+                return await this.error();
+            case "creating":
+                return await this.creating();
             default:
                 console.error(`Unhandled TrackSenderState(${state})`);
-                promise = Promise.resolve();
             }
-            resolve(promise);
-            promise.finally(() => this.stateChange = undefined);
         });
     }
-
 
     public get sfuId() {
         return this.sfu?.id;
@@ -69,35 +82,44 @@ export class TrackSender {
     private _maxWidth?: number;
     private _maxHeight?: number;
 
-    private async stateSending() {
-        try {
-            if(this._producer) { return await this._producer.start(); }
-            if(!this.sfu) { this.sfu = await this.getSfu(); }
-            this._producer = await this.sfu.produceTrack(
-                () => this.getParameter(),
-                this.name,
-                this.sessionId,
-            );
-        } finally {
+    private async sending() {
+        console.log(`TrackSender(${this.name}) stateSending`);
+        if(this._producer) {
             this.emitter.emit("statechange", "sending");
+            return await this._producer.start();
         }
+        this.emitter.emit("statechange", "creating");
     }
 
-    private async stateNotSending() {
+    private async notSending() {
         if(this._producer) { await this._producer.stop(); }
         this.emitter.emit("statechange", "not-sending");
     }
 
-    private async stateSwitchSfu() {
+    private async switchSfu() {
         if(!this._producer) { return; }
 
         await this._producer.close();
         this._producer = undefined;
         if(this.sfu) { this.sfu = undefined; }
-        this.emitter.emit("statechange", "not-sending");
+        this.emitter.emit("statechange", "sending");
+    }
 
-        await this.stateSending();
+    private async creating() {
+        if(!this.sfu) { this.sfu = await this.getSfu(); }
+        this._producer = await this.sfu.produceTrack(
+            this.getTrack,
+            this.name,
+            this.sessionId,
+        );
+        this._producer.once("close", async () => {
+            this.emitter.emit("statechange", "error");
+        });
+    }
 
+    private async error() {
+        this._producer = undefined;
+        this.emitter.emit("statechange", "creating");
     }
 
     private async getParameter(): Promise<ProducerParameters> {
@@ -128,13 +150,6 @@ export class TrackSender {
         return undefined;
     }
 
-    private stateChange?: Promise<unknown>;
-
-    private _producer?: Producer;
-    private sfu?: SFU;
-    private emitter = new EventEmitter<{
-        statechange: [TrackSenderState]
-    }>();
 }
 
 const isOptionalNonZeroPositiveInteger = (x: unknown): x is number|undefined => {

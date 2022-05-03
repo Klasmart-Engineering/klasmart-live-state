@@ -31,6 +31,7 @@ export abstract class Track {
     }
 
     public readonly on: EventEmitter<TrackEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
+    public readonly once: EventEmitter<TrackEventMap>["once"] = (event, listener) => this.emitter.once(event, listener);
     public readonly off: EventEmitter<TrackEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
 }
 
