@@ -1,6 +1,6 @@
 import EventEmitter from "eventemitter3";
 import {types as MediaSoup} from "mediasoup-client";
-import {newProducerID, ProducerId, Result} from "./sfu";
+import {newProducerID, ProducerId, ProducerParameters, Result} from "./sfu";
 
 export abstract class Track {
     public abstract get id(): ProducerId;
@@ -36,7 +36,7 @@ export abstract class Track {
 export class Producer extends Track {
     public constructor(
         private readonly producer: MediaSoup.Producer,
-        private readonly getTrack: () => Promise<MediaStreamTrack>,
+        private readonly getParameters: () => Promise<ProducerParameters>,
         private notifyPause: (paused: boolean) => Promise<void|Result>,
         requestPauseGlobally: (paused: boolean) => Promise<void|Result>
     ) {
@@ -55,7 +55,9 @@ export class Producer extends Track {
 
     public async start() {
         if(this.track?.readyState !== "live") {
-            const track = await this.getTrack();
+            const { track, encodings } = await this.getParameters();
+            const encoding = encodings[0];
+            if(encoding) { await this.producer.setRtpEncodingParameters(encoding); }
             await this.producer.replaceTrack({track});
         }
         await this.pause(false);

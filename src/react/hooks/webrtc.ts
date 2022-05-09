@@ -119,8 +119,19 @@ const useTrackSender = (
     return {
         ...useTrackState(trackSender.producer),
         track: trackSender.producer?.track,
+
         setSending: useAsyncCallback((send: boolean) => trackSender.changeState(send ? "sending" : "not-sending")),
         globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
+
+        getMaxWidth: trackSender.getMaxWidth.bind(trackSender),
+        setMaxWidth: trackSender.setMaxWidth.bind(trackSender),
+
+        getMaxHeight: trackSender.getMaxHeight.bind(trackSender),
+        setMaxHeight: trackSender.setMaxHeight.bind(trackSender),
+
+        getMaxFramerate: trackSender.getMaxFramerate.bind(trackSender),
+        setMaxFramerate: trackSender.setMaxFramerate.bind(trackSender),
+
     };
 };
 

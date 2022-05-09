@@ -6,6 +6,7 @@ import {Memoize} from "../memoize";
 import EventEmitter from "eventemitter3";
 import { BuiltinHandlerName } from "mediasoup-client/lib/Device";
 import {Consumer, Producer} from "./track";
+import { RtpEncodingParameters } from "mediasoup-client/lib/RtpParameters";
 
 export type SfuId = NewType<string, "sfuId">
 export const newSfuID = (id: string) => id as SfuId;
@@ -101,6 +102,11 @@ export type PauseEvent = {
 export type ClientId = NewType<string, "ClientId">;
 export function newClientId(id: string) { return id as ClientId; }
 
+export type ProducerParameters = {
+    track: MediaStreamTrack,
+    encodings?: RtpEncodingParameters[],
+}
+
 export class SFU {
     private _requestId = 0;
     /**
@@ -153,11 +159,11 @@ export class SFU {
     }
 
     public async produceTrack(
-        getTrack: () => Promise<MediaStreamTrack>,
+        getParameters: () => Promise<ProducerParameters>,
         name: string,
-        sessionId?: string
+        sessionId?: string,
     ) {
-        const producer = await this.createProducer(getTrack, name, sessionId);
+        const producer = await this.createProducer(getParameters, name, sessionId,);
         await this.pause(producer.id, false);
         return producer;
     }
@@ -195,18 +201,19 @@ export class SFU {
     }
 
     private async createProducer(
-        getTrack: () => Promise<MediaStreamTrack>,
+        getParameters: () => Promise<ProducerParameters>,
         name: string,
         sessionId?: string,
     ) {
         const producerTransport = await this.producerTransport();
 
-        const track = await getTrack();
+        const { track, encodings } = await getParameters();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`); }
 
         const mediaSoupProducer = await producerTransport.produce({
             track,
+            encodings,
             zeroRtpOnPause: true,
             disableTrackOnPause: true,
             stopTracks: true,
@@ -217,7 +224,7 @@ export class SFU {
         });
         const producer: Producer = new Producer(
             mediaSoupProducer,
-            getTrack,
+            getParameters,
             (paused: boolean) => this.pause(producer.id, paused),
             (paused: boolean) => this.pauseGlobally(producer.id, paused),
         );
