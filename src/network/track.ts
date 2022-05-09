@@ -71,8 +71,10 @@ export class Producer extends Track {
     public async start() {
         if(this.track?.readyState !== "live") {
             const { track, encodings } = await this.getParameters();
-            const encoding = encodings[0];
-            if(encoding) { await this.producer.setRtpEncodingParameters(encoding); }
+            if (encodings) {
+                const encoding = encodings[0];
+                if(encoding) { await this.producer.setRtpEncodingParameters(encoding); }
+            }
             await this.producer.replaceTrack({track});
         }
         await this.pause(false);

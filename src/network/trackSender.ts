@@ -108,7 +108,7 @@ export class TrackSender {
     private async creating() {
         if(!this.sfu) { this.sfu = await this.getSfu(); }
         this._producer = await this.sfu.produceTrack(
-            this.getTrack,
+            () => this.getParameter(),
             this.name,
             this.sessionId,
         );
@@ -139,8 +139,8 @@ export class TrackSender {
             const scaleWidth = width && this._maxWidth ? width / this._maxWidth : undefined;
             const scaleHeight = height && this._maxHeight ? height / this._maxHeight : undefined;
             const scaleResolutionDownBy = scaleWidth && scaleHeight ? Math.max(scaleWidth, scaleHeight) : (scaleWidth || scaleHeight);
-                
-            const maxFramerate = this._maxFramerate;            
+
+            const maxFramerate = this._maxFramerate;
             return [
                 { scaleResolutionDownBy, maxFramerate },
             ];
