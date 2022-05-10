@@ -1,8 +1,10 @@
 import EventEmitter from "eventemitter3";
 import {types as MediaSoup} from "mediasoup-client";
 import {newProducerID, ProducerId, ProducerParameters, Result} from "./sfu";
+import {Mutex} from "async-mutex";
 
 export abstract class Track {
+    protected pauseLock = new Mutex();
     protected _pausedGlobally?: boolean;
     protected readonly emitter = new EventEmitter<TrackEventMap>();
     protected constructor(
@@ -93,18 +95,20 @@ export class Producer extends Track {
     }
 
     private async pause(paused: boolean) {
-        await Promise.allSettled([
-            this.notifyPause(paused),
-            paused
-                ? this.producer.pause()
-                : this.producer.resume()
-        ]);
-        this.emitter.emit("pausedLocally", this.pausedLocally);
+        return await this.pauseLock.runExclusive(async () => {
+            await Promise.allSettled([
+                this.notifyPause(paused),
+                paused
+                    ? this.producer.pause()
+                    : this.producer.resume()
+            ]);
+            this.emitter.emit("pausedLocally", this.pausedLocally);
+        });
     }
 }
 
 export class Consumer extends Track {
-    static readonly PAUSE_DELAY = 500;
+    static readonly UNPAUSE_DELAY = 500;
     protected _pausedAtSource?: boolean;
     private pauseTimer?: NodeJS.Timeout;
     private pendingPauseStatus?: boolean;
@@ -161,44 +165,51 @@ export class Consumer extends Track {
     }
 
     private async pause(paused: boolean) {
-        if (this.pauseTimer && this.pendingPauseStatus !== undefined && paused !== this.pendingPauseStatus) {
-            clearTimeout(this.pauseTimer);
-            this.pauseTimer = undefined;
-            this.pendingPauseStatus = undefined;
-        } else if (this.pauseTimer && this.pendingPauseStatus !== undefined && paused === this.pendingPauseStatus) {
-            return;
-        }
-        if(this.pausedLocally === paused) { return; }
+        return await this.pauseLock.runExclusive(async () => {
+            const hasTimer = this.pauseTimer !== undefined && this.pendingPauseStatus !== undefined;
+            const pausedIsPending = this.pendingPauseStatus === paused;
+            const shouldWaitForTimer = hasTimer && pausedIsPending;
+            if (shouldWaitForTimer) {
+                return;
+            }
 
-        // Don't introduce a delay if we haven't changed pause state recently
-        const diff = Date.now() - (this.lastPauseChange ?? 0);
-        this.lastPauseChange = Date.now();
-        console.log(`Consumer.pause: diff=${diff}`);
+            const shouldClearTimer = hasTimer && !pausedIsPending;
+            if (shouldClearTimer) {
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                clearTimeout(this.pauseTimer!);
+                this.pauseTimer = undefined;
+                this.pendingPauseStatus = undefined;
+            }
 
-        if (diff > Consumer.PAUSE_DELAY) {
-            await Promise.allSettled([
-                this.notifyPause(paused),
-                paused
-                    ? this.consumer.pause()
-                    : this.consumer.resume()
-            ]);
-            this.emitter.emit("pausedLocally", this.pausedLocally);
-            return;
-        }
+            if(this.pausedLocally === paused) { return; }
 
-        // If the last pause change was recent, introduce a delay in case the pause state changes again
-        this.pendingPauseStatus = paused;
-        this.pauseTimer = setTimeout(async () => {
-            await Promise.allSettled([
-                this.notifyPause(paused),
-                paused
-                    ? this.consumer.pause()
-                    : this.consumer.resume()
-            ]);
-            this.emitter.emit("pausedLocally", this.pausedLocally);
-            this.pendingPauseStatus = undefined;
-            this.pauseTimer = undefined;
-        }, Consumer.PAUSE_DELAY);
+            const diff = Date.now() - (this.lastPauseChange ?? 0);
+
+            this.lastPauseChange = Date.now();
+
+            // Don't introduce a delay if we haven't changed pause state recently
+            if (diff > Consumer.UNPAUSE_DELAY || paused) {
+                await this.pauseConsumer(paused);
+                this.emitter.emit("pausedLocally", this.pausedLocally);
+                return;
+            }
+
+            // If the last pause change was recent, introduce a delay in case the pause state changes again
+            this.pendingPauseStatus = paused;
+            this.pauseTimer = setTimeout(async () => {
+                await this.pauseConsumer(paused);
+                this.emitter.emit("pausedLocally", this.pausedLocally);
+                this.pendingPauseStatus = undefined;
+                this.pauseTimer = undefined;
+            }, Consumer.UNPAUSE_DELAY);
+        });
+    }
+
+    private async pauseConsumer(paused: boolean) {
+        paused
+            ? this.consumer.pause()
+            : this.consumer.resume();
+        await this.notifyPause(paused);
     }
 }
 

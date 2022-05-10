@@ -11,6 +11,7 @@ enum SfuAuthErrorCodes {
 }
 
 export class WebRtcManager {
+    private maxSfuRetries = 10;
     public readonly room: Room;
     public microphoneConstraints?: MediaStreamConstraints["audio"];
     public readonly microphone = new TrackSender(
@@ -74,7 +75,7 @@ export class WebRtcManager {
     }
 
     private async onSfuConnectionError(error: SfuConnectionError) {
-        if (error.retries < 10 || !this.sfus.has(error.id)) {
+        if (error.retries < this.maxSfuRetries || !this.sfus.has(error.id)) {
             return;
         }
         try {
@@ -92,13 +93,18 @@ export class WebRtcManager {
                 await Promise.allSettled(promises);
             }
 
-            const sfu = this.sfus.get(error.id);
-            await sfu?.close();
-            this.sfus.delete(error.id);
-            await this.room.removeSfuId(error.id);
-        } catch (e) {
+            await this.removeSfu(error.id);
+        }
+        catch (e) {
             console.error(e);
         }
+    }
+
+    private async removeSfu(id: SfuId) {
+        const sfu = this.sfus.get(id);
+        await sfu?.close();
+        this.sfus.delete(id);
+        await this.room.removeSfuId(id);
     }
 
     private onSfuAuthError(error: SfuAuthErrors) {
