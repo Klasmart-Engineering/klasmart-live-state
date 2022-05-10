@@ -1,8 +1,9 @@
-import { ProducerParameters, SFU } from "./sfu";
+import { SFU } from "./sfu";
 import {EventEmitter} from "eventemitter3";
 import {Producer} from "./track";
 import { RtpEncodingParameters } from "mediasoup-client/lib/RtpParameters";
 import {Mutex} from "async-mutex";
+import {ProducerParameters} from "./sfuTypes";
 
 export type TrackSenderState = "sending" | "not-sending" | "error" | "switching-sfu" | "creating";
 

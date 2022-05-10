@@ -1,4 +1,4 @@
-import { ProducerId, SfuId } from "./sfu";
+import { ProducerId, SfuId } from "./sfuTypes";
 import { TransportState, WSTransport } from "./websocketTransport";
 import EventEmitter from "eventemitter3";
 
@@ -85,7 +85,7 @@ export class Room {
         this._producerSfuId = undefined;
         this.sessionMap.clear();
         this.trackInfoByProducerId.clear();
-        this.emitter.emit("close");        
+        this.emitter.emit("close");
     }
 
 

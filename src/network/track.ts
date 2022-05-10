@@ -1,6 +1,6 @@
 import EventEmitter from "eventemitter3";
 import {types as MediaSoup} from "mediasoup-client";
-import {newProducerID, ProducerId, ProducerParameters, Result} from "./sfu";
+import {newProducerID, ProducerId, ProducerParameters, Result} from "./sfuTypes";
 import {Mutex} from "async-mutex";
 
 export abstract class Track {

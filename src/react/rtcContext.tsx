@@ -1,6 +1,7 @@
 import React from "react";
 import {TrackSender} from "../network/trackSender";
-import {SFU, SfuId, SfuAuthErrors, SfuConnectionError, AuthorizationError, AuthenticationError} from "../network/sfu";
+import {SfuId, SfuAuthErrors, SfuConnectionError, AuthorizationError, AuthenticationError} from "../network/sfuTypes";
+import {SFU} from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
 
 enum SfuAuthErrorCodes {
