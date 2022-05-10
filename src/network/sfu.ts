@@ -366,14 +366,13 @@ export class SFU {
 
     private retry() {
         if (this.retryAttempts > this.retryMaxAttempts) {
-            this.clearRetries();
-            console.log("Max retry attempts reached, closing connection");
+            console.log("Max retry attempts reached");
             return;
         }
-        this.retryAttempts++;
-
         console.log(`id: ${this.id} retries: ${this.retryAttempts}/${this.retryMaxAttempts}`);
         this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.hasProducers));
+        this.retryAttempts++;
+
         this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
     }
 
