@@ -234,14 +234,18 @@ export class SFU {
             (paused: boolean) => this.pauseGlobally(producer.id, paused),
             producerTransport
         );
+        this.resolveProducer(producer);
+        return producer;
+    }
+
+    private resolveProducer(producer: Producer) {
         const resolver = this.producerResolvers.get(producer.id);
-        if(resolver) {
+        if (resolver) {
             this.producerResolvers.delete(producer.id);
             resolver(producer);
-        } else {
-            console.error(`Could not locate resolver while creating Producer(${producer.id})`);
+            return;
         }
-        return producer;
+        return console.error(`Could not locate resolver while creating Producer(${producer.id})`);
     }
 
     private async createConsumer(producerId: ProducerId) {
@@ -360,20 +364,24 @@ export class SFU {
         return this.promiseCompleter.createPromise(id);
     }
 
+    private retry() {
+        if (this.retryAttempts > this.retryMaxAttempts) {
+            this.clearRetries();
+            console.log("Max retry attempts reached, closing connection");
+            return;
+        }
+        this.retryAttempts++;
+
+        console.log(`id: ${this.id} retries: ${this.retryAttempts}/${this.retryMaxAttempts}`);
+        this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.hasProducers));
+        this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
+    }
+
     private onTransportStateChange(state: TransportState) {
         switch (state) {
         case "error":
             console.info(`Transport state changed to ${state}`);
-            this.retryAttempts++;
-            if (this.retryAttempts < this.retryMaxAttempts) {
-                console.log(`id: ${this.id} retries: ${this.retryAttempts}/${this.retryMaxAttempts}`);
-                this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.hasProducers));
-                this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
-            }
-            else {
-                this.clearRetries();
-                console.log("Max retry attempts reached, closing connection");
-            }
+            this.retry();
             break;
         case "connected":
             console.info(`Transport state changed to ${state}`);
@@ -386,12 +394,12 @@ export class SFU {
 
     private async waitRetry() {
         if (this.retryAttempts < 10) {
-            await new Promise(resolve => this.retryTimer = setTimeout(resolve, this.retryDelay));
-        } else if (this.retryAttempts < 20) {
-            await new Promise(resolve => this.retryTimer = setTimeout(resolve, 3 * this.retryDelay));
-        } else {
-            await new Promise(resolve => this.retryTimer = setTimeout(resolve, 5 * this.retryDelay));
+            return await new Promise(resolve => this.retryTimer = setTimeout(resolve, this.retryDelay));
         }
+        if (this.retryAttempts < 20) {
+            return await new Promise(resolve => this.retryTimer = setTimeout(resolve, 3 * this.retryDelay));
+        }
+        return await new Promise(resolve => this.retryTimer = setTimeout(resolve, 5 * this.retryDelay));
     }
 
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
@@ -437,10 +445,9 @@ export class SFU {
     private response(response: Response) {
         const { id } = response;
         if ("error" in response) {
-            this.promiseCompleter.reject(id, response.error);
-        } else {
-            this.promiseCompleter.resolve(id, response.result);
+            return this.promiseCompleter.reject(id, response.error);
         }
+        return this.promiseCompleter.resolve(id, response.result);
     }
 
     private async closeTrack(producerId: ProducerId) {

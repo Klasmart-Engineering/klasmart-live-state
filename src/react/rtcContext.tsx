@@ -1,8 +1,14 @@
 import React from "react";
 import {TrackSender} from "../network/trackSender";
-import {SFU, SfuId, SfuAuthErrors, SfuConnectionError} from "../network/sfu";
+import {SFU, SfuId, SfuAuthErrors, SfuConnectionError, AuthorizationError, AuthenticationError} from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
 
+enum SfuAuthErrorCodes {
+    INVALID = 4400,
+    EXPIRED = 4401,
+    NOT_BEFORE = 4403,
+    UNKNOWN_ERROR = 4500
+}
 
 export class WebRtcManager {
     public readonly room: Room;
@@ -97,81 +103,85 @@ export class WebRtcManager {
 
     private onSfuAuthError(error: SfuAuthErrors) {
         console.error(error.name);
-        enum SfuAuthErrorCodes {
-            INVALID = 4400,
-            EXPIRED = 4401,
-            NOT_BEFORE = 4403,
-            UNKNOWN_ERROR = 4500
-        }
+        const errorNotHandled = (error: SfuAuthErrors) => {console.error(`${JSON.stringify(error)} not handled`);};
 
         switch (error.name) {
         case "AuthenticationError":
-            switch (error.code){
-            case SfuAuthErrorCodes.INVALID:
-                if (this.onAuthenticationInvalid) {
-                    this.onAuthenticationInvalid();
-                } else {
-                    console.error("INVALID_AUTHENTICATION not handled");
-                }
-                break;
-            case SfuAuthErrorCodes.EXPIRED:
-                if (this.onAuthenticationExpired) {
-                    this.onAuthenticationExpired();
-                } else {
-                    console.error("EXPIRED_AUTHENTICATION not handled");
-                }
-                break;
-            case SfuAuthErrorCodes.NOT_BEFORE:
-            case SfuAuthErrorCodes.UNKNOWN_ERROR:
-            default:
-                console.error(JSON.stringify(error));
-            }
+            this.onAuthenticationError(error);
             break;
         case "AuthorizationError":
-            switch (error.code){
-            case SfuAuthErrorCodes.INVALID:
-                if (this.onAuthorizationInvalid) {
-                    this.onAuthorizationInvalid();
-                } else {
-                    console.error("INVALID_AUTHORIZATION not handled");
-                }
-                break;
-            case SfuAuthErrorCodes.EXPIRED:
-                if (this.onAuthorizationExpired) {
-                    this.onAuthorizationExpired();
-                } else {
-                    console.error("EXPIRED_AUTHORIZATION not handled");
-                }
-                break;
-            case SfuAuthErrorCodes.NOT_BEFORE:
-            case SfuAuthErrorCodes.UNKNOWN_ERROR:
-            default:
-                console.error(JSON.stringify(error));
-            }
+            this.onAuthorizationError(error);
             break;
         case "TokenMismatchError":
             if (this.onTokenMismatch) {
                 this.onTokenMismatch();
-            } else {
-                console.error("TOKEN_MISMATCH not handled");
+                break;
             }
+            errorNotHandled(error);
             break;
         case "MissingAuthenticationError":
             if (this.onMissingAuthenticationToken) {
                 this.onMissingAuthenticationToken();
-            } else {
-                console.error("MISSING_AUTHENTICATION_ERROR not handled");
+                break;
             }
+            errorNotHandled(error);
             break;
         case "MissingAuthorizationError":
             if (this.onMissingAuthorizationToken) {
                 this.onMissingAuthorizationToken();
-            } else {
-                console.error("MISSING_AUTHORIZATION_ERROR not handled");
+                break;
             }
+            errorNotHandled(error);
             break;
         default:
-            console.error(JSON.stringify(error));
+            errorNotHandled(error);
+        }
+    }
+
+    private onAuthorizationError(error: AuthorizationError) {
+        const errorNotHandled = (error: AuthorizationError) => {console.error(`${JSON.stringify(error)} not handled`);};
+        switch (error.code) {
+        case SfuAuthErrorCodes.INVALID:
+            if (this.onAuthorizationInvalid) {
+                this.onAuthorizationInvalid();
+                break;
+            }
+            errorNotHandled(error);
+            break;
+        case SfuAuthErrorCodes.EXPIRED:
+            if (this.onAuthorizationExpired) {
+                this.onAuthorizationExpired();
+            }
+            errorNotHandled(error);
+            break;
+        case SfuAuthErrorCodes.NOT_BEFORE:
+        case SfuAuthErrorCodes.UNKNOWN_ERROR:
+        default:
+            errorNotHandled(error);
+        }
+    }
+
+    private onAuthenticationError(error: AuthenticationError) {
+        const errorNotHandled = (error: AuthenticationError) => {console.error(`${JSON.stringify(error)} not handled`);};
+        switch (error.code) {
+        case SfuAuthErrorCodes.INVALID:
+            if (this.onAuthenticationInvalid) {
+                this.onAuthenticationInvalid();
+                break;
+            }
+            errorNotHandled(error);
+            break;
+        case SfuAuthErrorCodes.EXPIRED:
+            if (this.onAuthenticationExpired) {
+                this.onAuthenticationExpired();
+                break;
+            }
+            errorNotHandled(error);
+            break;
+        case SfuAuthErrorCodes.NOT_BEFORE:
+        case SfuAuthErrorCodes.UNKNOWN_ERROR:
+        default:
+            errorNotHandled(error);
         }
     }
 

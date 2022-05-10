@@ -45,7 +45,10 @@ export class Producer extends Track {
     ) {
         super(requestPauseGlobally, transport);
         console.log("producer constructor", producer);
-        producer.on("transportclose", () => this.stop());
+        producer.on("transportclose", async () => {
+            await this.stop();
+            await this.close();
+        });
         producer.on("trackended", () => this.stop());
         transport.on("connectionstatechange", async (state) => {
             console.log(`Producer connectionstatechange: ${state}`);

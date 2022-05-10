@@ -105,10 +105,9 @@ export class Network<ApplicationState = unknown> {
         }
         const requestId = newRequestId(response.id);
         if (response.error) {
-            this.rpc.reject(requestId, response.error);
-        } else {
-            this.rpc.resolve(requestId);
+            return this.rpc.reject(requestId, response.error);
         }
+        return this.rpc.resolve(requestId);
     }
 
     public async send(command: IClassRequest): Promise<void> {
