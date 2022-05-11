@@ -102,7 +102,6 @@ export class SFU {
     public async close() {
         console.log(`Closing SFU ${this.id}`);
         this.ws.disconnect();
-        this.clearRetries();
         const promises = [
             ...this.producers.values(),
             ...this.consumers.values(),
@@ -143,10 +142,16 @@ export class SFU {
         const producer: Producer = new Producer(
             mediaSoupProducer,
             getParameters,
-            (paused: boolean) => this.pause(producer.id, paused),
-            (paused: boolean) => this.pauseGlobally(producer.id, paused),
             producerTransport
         );
+
+        producer.on("pausedLocally" || "pausedAtSource", (paused) => {
+            if (paused !== undefined) this.pause(producer.id, paused);
+        });
+        producer.on("pausedGlobally", (paused) => {
+            if (paused !== undefined) this.pauseGlobally(producer.id, paused);
+        });
+
         this.resolveProducer(producer);
         return producer;
     }
@@ -168,14 +173,19 @@ export class SFU {
         if (!response) { throw new Error(`Received empty response from SFU when trying to consume producerId(${producerId})`); }
         if (!response.consumerCreated) { throw new Error(`Received response without consumer parameters from SFU when trying to consume producerId(${producerId})`); }
         console.log(response);
-        const consumer = await consumerTransport.consume(response.consumerCreated);
+        const mediasoupConsumer = await consumerTransport.consume(response.consumerCreated);
         await this.pause(producerId, false);
-        return new Consumer(
-            consumer,
-            (paused: boolean) => this.pause(producerId, paused),
-            (paused: boolean) => this.pauseGlobally(producerId, paused),
+        const consumer =  new Consumer(
+            mediasoupConsumer,
             consumerTransport
         );
+        consumer.on("pausedLocally" || "pausedAtSource", (paused) => {
+            if (paused !== undefined) this.pause(producerId, paused);
+        });
+        consumer.on("pausedGlobally", (paused) => {
+            if (paused !== undefined) this.pauseGlobally(producerId, paused);
+        });
+        return consumer;
     }
 
     public async pauseGlobally(id: ProducerId, paused: boolean) {

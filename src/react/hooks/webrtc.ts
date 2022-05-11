@@ -101,7 +101,10 @@ export const useTrack = (
         start,
         stop,
         pause: useAsyncCallback(async (paused: boolean) => await (paused ? stop : start).execute()),
-        globalPause: useAsyncCallback(async (paused: boolean) => (await trackPromise)?.requestBroadcastStateChange(paused)),
+        globalPause: useAsyncCallback(async (paused: boolean) => {
+            const track = (await trackPromise);
+            if (track) track.pausedGlobally = paused;
+        }),
     };
 };
 
@@ -121,7 +124,10 @@ const useTrackSender = (
         track: trackSender.producer?.track,
 
         setSending: useAsyncCallback((send: boolean) => trackSender.changeState(send ? "sending" : "not-sending")),
-        globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
+        globalPause: useAsyncCallback(async (paused: boolean) => {
+            const producer = trackSender.producer;
+            if (producer) producer.pausedGlobally = paused;
+        }),
 
         getMaxWidth: trackSender.getMaxWidth.bind(trackSender),
         setMaxWidth: trackSender.setMaxWidth.bind(trackSender),

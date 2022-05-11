@@ -1,6 +1,6 @@
 import EventEmitter from "eventemitter3";
 import {types as MediaSoup} from "mediasoup-client";
-import {newProducerID, ProducerId, ProducerParameters, Result} from "./sfuTypes";
+import {newProducerID, ProducerId, ProducerParameters} from "./sfuTypes";
 import {Mutex} from "async-mutex";
 
 export abstract class Track {
@@ -8,7 +8,6 @@ export abstract class Track {
     protected _pausedGlobally?: boolean;
     protected readonly emitter = new EventEmitter<TrackEventMap>();
     protected constructor(
-        public readonly requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>,
         protected readonly transport: MediaSoup.Transport
     ) { }
 
@@ -41,11 +40,9 @@ export class Producer extends Track {
     public constructor(
         private readonly producer: MediaSoup.Producer,
         private readonly getParameters: () => Promise<ProducerParameters>,
-        private notifyPause: (paused: boolean) => Promise<void|Result>,
-        requestPauseGlobally: (paused: boolean) => Promise<void|Result>,
         transport: MediaSoup.Transport
     ) {
-        super(requestPauseGlobally, transport);
+        super(transport);
         console.log("producer constructor", producer);
         producer.on("transportclose", async () => {
             await this.stop();
@@ -96,12 +93,9 @@ export class Producer extends Track {
 
     private async pause(paused: boolean) {
         return await this.pauseLock.runExclusive(async () => {
-            await Promise.allSettled([
-                this.notifyPause(paused),
-                paused
-                    ? this.producer.pause()
-                    : this.producer.resume()
-            ]);
+            paused
+                ? this.producer.pause()
+                : this.producer.resume();
             this.emitter.emit("pausedLocally", this.pausedLocally);
         });
     }
@@ -116,11 +110,9 @@ export class Consumer extends Track {
 
     public constructor (
         private consumer: MediaSoup.Consumer,
-        private notifyPause: (paused: boolean) => Promise<void|Result>,
-        requestPauseGlobally: (paused: boolean) => Promise<void|Result>,
         transport: MediaSoup.Transport
     ) {
-        super(requestPauseGlobally, transport);
+        super(transport);
         consumer.on("transportclose", () => this.pause(true));
         consumer.on("trackended", () => this.pause(true));
         transport.on("connectionstatechange", async (state) => {
@@ -189,27 +181,25 @@ export class Consumer extends Track {
 
             // Don't introduce a delay if we haven't changed pause state recently
             if (diff > Consumer.UNPAUSE_DELAY || paused) {
-                await this.pauseConsumer(paused);
-                this.emitter.emit("pausedLocally", this.pausedLocally);
+                this.pauseConsumer(paused);
                 return;
             }
 
             // If the last pause change was recent, introduce a delay in case the pause state changes again
             this.pendingPauseStatus = paused;
             this.pauseTimer = setTimeout(async () => {
-                await this.pauseConsumer(paused);
-                this.emitter.emit("pausedLocally", this.pausedLocally);
+                this.pauseConsumer(paused);
                 this.pendingPauseStatus = undefined;
                 this.pauseTimer = undefined;
             }, Consumer.UNPAUSE_DELAY);
         });
     }
 
-    private async pauseConsumer(paused: boolean) {
+    private pauseConsumer(paused: boolean) {
         paused
             ? this.consumer.pause()
             : this.consumer.resume();
-        await this.notifyPause(paused);
+        this.emitter.emit("pausedLocally", paused);
     }
 }
 
