@@ -29,9 +29,6 @@ export class SFU {
     private readonly device = new Device({handlerName: process.env["WEBRTC_DEVICE_HANDLER_NAME"] as BuiltinHandlerName});
     private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>();
     private readonly ws: WSTransport;
-    private retryDelay = 1000;
-    private retryAttempts = 0;
-    private retryMaxAttempts = 30;
     private retryTimer?: NodeJS.Timeout;
     private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
     private _producerTransport?: MediaSoup.Transport;
@@ -41,14 +38,14 @@ export class SFU {
     public emitter = new EventEmitter<SfuEventMap>();
     private readonly producerTransportLock = new Mutex();
     private readonly consumerTransportLock = new Mutex();
-
-    public onTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.on(id, () => f(id)); };
-    public offTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.off(id, () => f(id)); };
     private trackUpdateEmitter = new EventEmitter<Record<ProducerId,[]>>();
 
     public constructor(
         public readonly id: SfuId,
         public readonly url: string,
+        private retryDelay = 1000,
+        private retryAttempts = 0,
+        private retryMaxAttempts = 10,
     ) {
         this.ws = new WSTransport(
             url,
@@ -59,6 +56,13 @@ export class SFU {
             null,
         );
         this.ws.connect().catch(e => console.error(e));
+    }
+
+    public onTrackUpdate(id: ProducerId, f: {(id: ProducerId):unknown}) {
+        this.trackUpdateEmitter.on(id, () => f(id));
+    }
+    public offTrackUpdate(id: ProducerId, f: {(id: ProducerId):unknown}) {
+        this.trackUpdateEmitter.off(id, () => f(id));
     }
 
     private generateRequestId() { return `${this._requestId++}` as RequestId; }
