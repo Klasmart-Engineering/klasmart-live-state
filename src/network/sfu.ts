@@ -38,6 +38,7 @@ export class SFU {
     public emitter = new EventEmitter<SfuEventMap>();
     private readonly producerTransportLock = new Mutex();
     private readonly consumerTransportLock = new Mutex();
+    private readonly pauseLocks = new Map<ProducerId, Mutex>();
     private trackUpdateEmitter = new EventEmitter<Record<ProducerId,[]>>();
 
     public constructor(
@@ -91,6 +92,7 @@ export class SFU {
         if(this.producers.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
         const consumerPromise = this.createConsumer(producerId);
         this.consumers.set(producerId, consumerPromise);
+        if (!this.pauseLocks.has(producerId)) this.pauseLocks.set(producerId, new Mutex());
         this.trackUpdateEmitter.emit(producerId);
         return await consumerPromise;
     }
@@ -189,11 +191,23 @@ export class SFU {
     }
 
     public async pauseGlobally(id: ProducerId, paused: boolean) {
-        return await this.request({pauseForEveryone: {id, paused}});
+        const lock = this.pauseLocks.get(id);
+        if (!lock) {
+            throw new Error(`Could not find pause lock for producerId(${id})`);
+        }
+        return await lock.runExclusive(async () => {
+            return await this.request({pauseForEveryone: {id, paused}});
+        });
     }
 
     public async pause(id: ProducerId, paused: boolean) {
-        return await this.request({pause: {id, paused}});
+        const lock = this.pauseLocks.get(id);
+        if (!lock) {
+            throw new Error(`Could not find pause lock for producerId(${id})`);
+        }
+        return await lock.runExclusive(async () => {
+            return await this.request({pause: {id, paused}});
+        });
     }
 
     private async consumerTransport() {
@@ -257,6 +271,8 @@ export class SFU {
                 if(!id) { return error("Malformed response from SFU"); }
                 const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
                 this.producers.set(id, producerPromise);
+                if (!this.pauseLocks.has(id)) this.pauseLocks.set(id, new Mutex());
+
                 this.trackUpdateEmitter.emit(id);
                 producerPromise.then(p => p.pausedGlobally = producerCreated.pausedGlobally);
                 callback({id});
