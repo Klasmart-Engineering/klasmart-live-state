@@ -3,7 +3,7 @@ import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackInfo, TrackLocation } from "../../network/room";
 import { Track as SfuTrack } from "../../network/track";
 import { TrackSender } from "../../network/trackSender";
-import { WebRtcContext, WebRtcManager } from "../rtcContext";
+import { WebRtcContext } from "../rtcContext";
 
 export const useWebRtcConstraints = (
     ctx = useContext(WebRtcContext)
@@ -42,6 +42,15 @@ export type SessionAVStreams = {
   videoLocation: TrackInfo | undefined;
   audio: SfuTrack | undefined,
   video: SfuTrack | undefined,
+  audioState: SfuTrackState | undefined,
+  videoState: SfuTrackState | undefined,
+}
+
+export type SfuTrackState = {
+  isConsumable: boolean,
+  isPausedLocally: boolean,
+  isPausedGlobally: boolean,
+  isPausedAtSource: boolean,
 }
 
 //
@@ -54,63 +63,114 @@ export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
   const audioName = "microphone";
   const videoName = "camera";
   const [loading, setLoading] = useState(false);
-
   const [renderCount, rerender] = useReducer(i => i + 1, 0);
+
   const sessionToTracksMap = useMemo(() => {
     const sessionToTracksMap: Map<string, SessionAVStreams> = new Map();
+    console.warn('0. useMemo ===>', { trackInfos })
   
     trackInfos.forEach((trackInfo) => {
       const sessionId = trackInfo.sessionId;
       if (sessionId) {
         const name = trackInfo.name;
-        sessionToTracksMap.get(sessionId);
-        const sessionTracks = sessionToTracksMap.get(sessionId) || { sessionId } as SessionAVStreams;
-
+        const sessionTracks = sessionToTracksMap.get(sessionId);
+        console.warn('1. useMemo ===>', { sessionId, sessionTracks, sessionToTracksMap })
         if (!sessionTracks) {
           const newAvTracks = {
-          sessionId,
+            sessionId,
             audioLocation: name === audioName ? trackInfo : undefined,
             videoLocation: name === videoName ? trackInfo : undefined,
           } as SessionAVStreams;
           sessionToTracksMap.set(sessionId, newAvTracks);
+          console.warn('2. useMemo ===>', { sessionId, newAvTracks, sessionToTracksMap })
         } else {
           if (name === audioName) {
             sessionTracks.audioLocation = trackInfo;
           } else if (name === videoName) {
             sessionTracks.videoLocation = trackInfo;
           }
+          console.warn('3. useMemo ===>', { sessionId, sessionTracks, sessionToTracksMap })
         }
       }
     });
-
+    console.warn('x. useMemo ===>', { sessionToTracksMap })
     return sessionToTracksMap
-  }, [ctx, trackInfos, renderCount])
+  }, [ctx.room, trackInfos, renderCount])
 
+  console.warn('useRoomTracks ===>', { trackInfos, sessionToTracksMap })
+
+  const [sessionsTracks, setSessionsTracks] = useState(Array.from(sessionToTracksMap.values()))
   // // get the SFU tracks
   // const { sfuId, producerId } = trackInfo;
   // const sfuTrack = await ctx.sfu(sfuId).getTrack(producerId);
   useEffect(() => {
     const f = async () => {
-      setLoading(true)
-      for (const audioVideoTracks of sessionToTracksMap.values()) {
-        const { sessionId, audioLocation, videoLocation } = audioVideoTracks
-        if (audioLocation) {
-          const { sfuId, producerId } = audioLocation;
-          const sfuTrack = await ctx.sfu(sfuId).getTrack(producerId);
-          sfuTrack.on("pausedAtSource", rerender);
-          sfuTrack.on("pausedGlobally", rerender);
-          sfuTrack.on("pausedLocally", rerender);
-          sessionToTracksMap.set(sessionId, {...audioVideoTracks, audio: sfuTrack })
+      console.warn('1. useEffect FUNC ===> subscribe to', sessionsTracks.length, 'tracks')
+      setLoading(true);
+
+      const newSessionsTracks = (await Promise.allSettled(sessionsTracks.map(async (sessionTracks) => {
+        const { sessionId, audioLocation, videoLocation } = sessionTracks;
+        let audio
+        let video
+        let audioState
+        let videoState
+
+        for (const { location, type } of [{ location: audioLocation, type: 'audio' }, { location: videoLocation, type: 'video' }]) {
+          let sfuTrack: SfuTrack | undefined = undefined
+          let state: SfuTrackState | undefined = undefined
+
+          console.warn('2. useEffect FUNC loop ===>', { location, type })
+
+          if (location) {
+            // get the SFU track
+            const { sfuId, producerId } = location;
+            sfuTrack = await ctx.sfu(sfuId).getTrack(producerId);
+            sfuTrack.on("pausedAtSource", rerender);
+            sfuTrack.on("pausedGlobally", rerender);
+            sfuTrack.on("pausedLocally", rerender);
+
+            // update the state
+            const isActiveLocally = sfuTrack?.pausedLocally === false;
+            const isActiveAtProducer = sfuTrack?.pausedAtSource === false;
+            const isActiveGlobally = isActiveAtProducer && sfuTrack?.pausedGlobally === false;
+
+            state = sfuTrack ? {
+              isConsumable: isActiveGlobally && isActiveLocally,
+              isPausedLocally: sfuTrack.pausedLocally !== false,
+              isPausedGlobally: sfuTrack.pausedGlobally !== false,
+              isPausedAtSource: sfuTrack.pausedAtSource !== false,
+            } : {
+              isConsumable: false,
+              isPausedLocally: false,
+              isPausedGlobally: false,
+              isPausedAtSource: false,
+            }
+          }
+
+          if (type === 'audio') {
+            audio = sfuTrack
+            audioState = state
+          } else {
+            video = sfuTrack
+            videoState = state
+          }
         }
-        if (videoLocation) {
-          const { sfuId, producerId } = videoLocation;
-          const sfuTrack = await ctx.sfu(sfuId).getTrack(producerId);
-          sfuTrack.on("pausedAtSource", rerender);
-          sfuTrack.on("pausedGlobally", rerender);
-          sfuTrack.on("pausedLocally", rerender);
-          sessionToTracksMap.set(sessionId, {...audioVideoTracks, video: sfuTrack })
+
+        return {
+          sessionId,
+          audioLocation,
+          videoLocation,
+          audio,
+          audioState,
+          video,
+          videoState,
         }
-      }
+      }))).map((promise) => {
+        return promise.status === 'fulfilled' ? promise.value : undefined
+      }).filter((x): x is SessionAVStreams => !!x)
+
+      console.warn('3. useEffect setting newSessionsTracks ===>', { newSessionsTracks })
+      setSessionsTracks(newSessionsTracks)
       setLoading(false)
     }
 
@@ -118,7 +178,8 @@ export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
     f()
 
     return () => {
-      for (const audioVideoTracks of sessionToTracksMap.values()) {
+      console.warn('END. useEffect ===> unsubscribe to', sessionsTracks.length, 'tracks')
+      for (const audioVideoTracks of sessionsTracks) {
         const { audio, video } = audioVideoTracks
         if (audio) {
           audio.off("pausedAtSource", rerender);
@@ -132,20 +193,23 @@ export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
         }
       }
     }
-  })
+  }, [renderCount])
 
   useEffect(() => {
     ctx.room.on("tracksUpdated", rerender);
     return () => { ctx.room.off("tracksUpdated", rerender);};
   }, [ctx.room]);
 
-  return { sessionToTracksMap, loading}
+  console.warn('xyz 1. useRoomTracks RETURNS ===>', { sessionToTracksMap, sessionsTracks })
+
+  return { sessionsTracks, loading}
 };
 
 /// TODO
 export const useTracksStates = () => {}
 
 export type StreamNamePair = { audio: string, video: string }
+
 export function useStream(sessionId: string, name?: string | StreamNamePair, ctx = useContext(WebRtcContext)) {
     const audioName = typeof name === "string" ? `${name}-audio` : name?.audio ?? "microphone";
     const videoName = typeof name === "string" ? `${name}-video` : name?.video ?? "camera";
@@ -180,60 +244,6 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
         stream,
     };
 }
-
-// const useTracks = async (locations: TrackLocation[], ctx = useContext(WebRtcContext)) => {
-
-//   const _getTrack = async (location: TrackLocation) => {
-//     const { sfuId, producerId } = location;
-//     return await ctx.sfu(sfuId).getTrack(producerId)
-//   }
-
-//   const {
-//     currentPromise: tracksPromise,
-//     result: tracks,
-//     execute: execGetTracks,
-//   } = useAsync(async (locations: TrackLocation[]) => {
-//     if (locations.length === 0) { return; }
-//     return Promise.all(locations.map(async (location) => {
-//       const { sfuId, producerId } = location;
-//       return ctx.sfu(sfuId).getTrack(producerId); // returns memoized track or creates a new one
-//     }));
-//   }, [locations])
-
-//   useEffect(() => {
-//     if (locations.length === 0) { return; }
-    
-//     // each individual track update will trigger the execution of an update to the list of tracks
-//     const exitFuncs = locations.map((location) => {
-//       const {sfuId, producerId} = location;
-//       const sfu = ctx.sfu(sfuId);
-//       const callback = () => execGetTracks(locations);
-//       sfu.onTrackUpdate(producerId, callback);
-//       return () => void sfu.offTrackUpdate(producerId, callback);
-//     })
-
-//     return () => {
-//       exitFuncs.forEach((f) => void f())
-//     }
-//   })
-  
-//   // const trackPromise = _getTrack()
-//   const start = async () => (await trackPromise)?.start();
-//   const stop = async () => (await trackPromise)?.stop();
-
-//   return {
-//     track,
-//     hasLocation: Boolean(location),
-//     ...useTrackState(track),
-//     kind: track?.kind,
-//     isMine: track?.isMine,
-//     start,
-//     stop,
-//     pause: useAsyncCallback(async (paused: boolean) => await (paused ? stop : start).execute()),
-//     globalPause: useAsyncCallback(async (paused: boolean) => (await trackPromise)?.requestBroadcastStateChange(paused)),
-//   }
-// }
-
 
 export const useTrack = (
     location?: TrackLocation,
