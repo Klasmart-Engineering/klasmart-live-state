@@ -79,11 +79,11 @@ export class SFU {
     }
 
     public async produceTrack(
-        getParameters: () => Promise<ProducerParameters>,
+        parameters: ProducerParameters,
         name: string,
         sessionId?: string,
     ) {
-        const producer = await this.createProducer(getParameters, name, sessionId,);
+        const producer = await this.createProducer(parameters, name, sessionId,);
         await this.pause(producer.id, false);
         return producer;
     }
@@ -120,13 +120,13 @@ export class SFU {
     }
 
     private async createProducer(
-        getParameters: () => Promise<ProducerParameters>,
+        parameters: ProducerParameters,
         name: string,
         sessionId?: string,
     ) {
         const producerTransport = await this.producerTransport();
 
-        const { track, encodings } = await getParameters();
+        const { track, encodings } = parameters;
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
         if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`); }
 
@@ -143,7 +143,7 @@ export class SFU {
         });
         const producer: Producer = new Producer(
             mediaSoupProducer,
-            getParameters,
+            parameters,
             producerTransport
         );
 
@@ -152,6 +152,10 @@ export class SFU {
         });
         producer.on("pausedGlobally", (paused) => {
             if (paused !== undefined) this.pauseGlobally(producer.id, paused);
+        });
+        producer.on("close", () => {
+            this.producers.delete(producer.id);
+            this.pauseLocks.delete(producer.id);
         });
 
         this.resolveProducer(producer);
@@ -186,6 +190,10 @@ export class SFU {
         });
         consumer.on("pausedGlobally", (paused) => {
             if (paused !== undefined) this.pauseGlobally(producerId, paused);
+        });
+        consumer.on("close", () => {
+            this.consumers.delete(producerId);
+            this.pauseLocks.delete(producerId);
         });
         return consumer;
     }

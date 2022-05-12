@@ -39,27 +39,27 @@ export abstract class Track {
 export class Producer extends Track {
     public constructor(
         private readonly producer: MediaSoup.Producer,
-        private readonly getParameters: () => Promise<ProducerParameters>,
+        private parameters: ProducerParameters,
         transport: MediaSoup.Transport
     ) {
         super(transport);
         console.log("producer constructor", producer);
         producer.on("transportclose", async () => {
             await this.stop();
-            await this.close();
+            this.close();
         });
         producer.on("trackended", () => this.stop());
         transport.on("connectionstatechange", async (state) => {
             console.log(`Producer connectionstatechange: ${state}`);
             if (state === "disconnected" || state === "failed" || state === "closed") {
                 await this.stop();
-                await this.close();
+                this.close();
             }
         });
         transport.observer.on("close", async () => {
             console.log("Producer transport close");
             await this.stop();
-            await this.close();
+            this.close();
         });
     }
 
@@ -72,7 +72,7 @@ export class Producer extends Track {
 
     public async start() {
         if(this.track?.readyState !== "live") {
-            const { track, encodings } = await this.getParameters();
+            const { track, encodings } = this.parameters;
             if (encodings) {
                 const encoding = encodings[0];
                 if(encoding) { await this.producer.setRtpEncodingParameters(encoding); }
@@ -119,13 +119,13 @@ export class Consumer extends Track {
             console.log(`Consumer connectionstatechange: ${state}`);
             if (state === "disconnected" || state === "failed" || state === "closed") {
                 await this.stop();
-                await this.close();
+                this.close();
             }
         });
         transport.observer.on("close", async () => {
             console.log("Consumer transport close");
             await this.stop();
-            await this.close();
+            this.close();
         });
     }
 
