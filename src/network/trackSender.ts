@@ -1,9 +1,18 @@
-import { Producer, SFU } from "./sfu";
+import { ProducerParameters, SFU } from "./sfu";
 import {EventEmitter} from "eventemitter3";
+import {Producer} from "./track";
+import { RtpEncodingParameters } from "mediasoup-client/lib/RtpParameters";
 
 export type TrackSenderState = "sending" | "not-sending"
 
 export class TrackSender {
+    public constructor (
+        private readonly getSfu: () => Promise<SFU>,
+        private readonly getTrack: () => Promise<MediaStreamTrack>,
+        private readonly name: string,
+        private readonly sessionId?: string,
+    ) {}
+
     public on: TrackSender["emitter"]["on"] = (event, callback) => this.emitter.on(event, callback);
     public off: TrackSender["emitter"]["off"] = (event, callback) => this.emitter.off(event, callback);
     public once: TrackSender["emitter"]["once"] = (event, callback) => this.emitter.once(event, callback);
@@ -38,19 +47,34 @@ export class TrackSender {
         return this.sfu?.id;
     }
 
-    public constructor (
-        private readonly getSfu: () => Promise<SFU>,
-        private readonly getTrack: () => Promise<MediaStreamTrack>,
-        private readonly name: string,
-        private readonly sessionId?: string,
-    ) {}
+    public getMaxFramerate() { return this._maxFramerate; }
+    public setMaxFramerate(max?:  number) {
+        if(!isOptionalNonZeroPositiveInteger(max)) { return; }
+        this._maxFramerate = max;
+    }
+
+    public getMaxWidth() { return this._maxWidth; }
+    public setMaxWidth(max?:  number) {
+        if(!isOptionalNonZeroPositiveInteger(max)) { return; }
+        this._maxWidth = max;
+    }
+
+    public getMaxHeight() { return this._maxHeight; }
+    public setMaxHeight(max?:  number) {
+        if(!isOptionalNonZeroPositiveInteger(max)) { return; }
+        this._maxHeight = max;
+    }
+
+    private _maxFramerate?: number;
+    private _maxWidth?: number;
+    private _maxHeight?: number;
 
     private async stateSending() {
         try {
             if(this._producer) { return await this._producer.start(); }
             if(!this.sfu) { this.sfu = await this.getSfu(); }
             this._producer = await this.sfu.produceTrack(
-                this.getTrack,
+                () => this.getParameter(),
                 this.name,
                 this.sessionId,
             );
@@ -76,6 +100,34 @@ export class TrackSender {
 
     }
 
+    private async getParameter(): Promise<ProducerParameters> {
+        const track = await this.getTrack();
+
+        return {
+            track,
+            encodings: this.getEncodings(track),
+        };
+    }
+
+    private getEncodings(track: MediaStreamTrack): RtpEncodingParameters[]|undefined {
+        switch(track.kind) {
+        case "video": {
+            const { width, height } = track.getSettings();
+
+            const scaleWidth = width && this._maxWidth ? width / this._maxWidth : undefined;
+            const scaleHeight = height && this._maxHeight ? height / this._maxHeight : undefined;
+            const scaleResolutionDownBy = scaleWidth && scaleHeight ? Math.max(scaleWidth, scaleHeight) : (scaleWidth || scaleHeight);
+                
+            const maxFramerate = this._maxFramerate;            
+            return [
+                { scaleResolutionDownBy, maxFramerate },
+            ];
+        }
+        }
+
+        return undefined;
+    }
+
     private stateChange?: Promise<unknown>;
 
     private _producer?: Producer;
@@ -85,3 +137,13 @@ export class TrackSender {
     }>();
 }
 
+const isOptionalNonZeroPositiveInteger = (x: unknown): x is number|undefined => {
+    switch(typeof x) {
+    case "number":
+        return Number.isSafeInteger(x) && x > 0;
+    case "undefined":
+        return true;
+    default:
+        return false;
+    }
+};

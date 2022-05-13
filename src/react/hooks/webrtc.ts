@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
-import { Track as SfuTrack } from "../../network/sfu";
+import { Track as SfuTrack } from "../../network/track";
 import { TrackSender } from "../../network/trackSender";
 import { WebRtcContext } from "../rtcContext";
 
@@ -119,8 +119,19 @@ const useTrackSender = (
     return {
         ...useTrackState(trackSender.producer),
         track: trackSender.producer?.track,
+
         setSending: useAsyncCallback((send: boolean) => trackSender.changeState(send ? "sending" : "not-sending")),
         globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
+
+        getMaxWidth: trackSender.getMaxWidth.bind(trackSender),
+        setMaxWidth: trackSender.setMaxWidth.bind(trackSender),
+
+        getMaxHeight: trackSender.getMaxHeight.bind(trackSender),
+        setMaxHeight: trackSender.setMaxHeight.bind(trackSender),
+
+        getMaxFramerate: trackSender.getMaxFramerate.bind(trackSender),
+        setMaxFramerate: trackSender.setMaxFramerate.bind(trackSender),
+
     };
 };
 
@@ -145,11 +156,18 @@ const useTrackState = (
     const isActiveAtProducer = track?.pausedAtSource === false;
     const isActiveGlobally = isActiveAtProducer && track?.pausedGlobally === false;
 
+    if (!track) return {
+        isConsumable: false,
+        isPausedLocally: false,
+        isPausedGlobally: false,
+        isPausedAtSource: false
+    };
+
     return {
         isConsumable: isActiveGlobally && isActiveLocally,
-        isPausedLocally: track?.pausedLocally !== false,
-        isPausedGlobally: track?.pausedGlobally !== false,
-        isPausedAtSource: track?.pausedAtSource !== false,
+        isPausedLocally: track.pausedLocally !== false,
+        isPausedGlobally: track.pausedGlobally !== false,
+        isPausedAtSource: track.pausedAtSource !== false,
     };
 };
 
@@ -158,7 +176,7 @@ export const useMediaStreamTracks = (
 ) => {
     const stream = useMemo(() => new MediaStream(), []);
     const previousTrackSet = new Set(stream.getTracks());
-    
+
     for(const track of nextTrackSet) {
         if(!track || track.readyState !== "live") { continue; }
         const isNewTrack = !previousTrackSet.delete(track);

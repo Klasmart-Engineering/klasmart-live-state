@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.6.0](https://github.com/KL-Engineering/kidsloop-live-state/branches/compare/v1.6.0%0Dv1.5.0) (2022-05-10)
+
+
+### 🗑 Reverts
+
+* Revert "feat: allow WebRtcManager to be reinstantiated for when parameters change (#11)" (#13) ([d071135](https://github.com/KL-Engineering/kidsloop-live-state/commits/d0711351916d5227521141f7ad515fa7362adbd5))
+
+
+### 🐛 Bug Fixes
+
+* SFU-61 (#14) ([496b525](https://github.com/KL-Engineering/kidsloop-live-state/commits/496b525dc5afedb6cd9fcac476739f985e0e7f68))
+
+
+### ✨ Features
+
+* return false for isPaused hooks when there is no track (#12) ([1b95c65](https://github.com/KL-Engineering/kidsloop-live-state/commits/1b95c65ba224b7df350512b9143a2a6468c9c813))
+* sfu-58 downscale video during webrtc encoding (#15) ([a1c574d](https://github.com/KL-Engineering/kidsloop-live-state/commits/a1c574dbe2bc83fed05cd7ef8508982e6238a72b))
+
 ## [1.5.0](https://github.com/KL-Engineering/kidsloop-live-state/branches/compare/v1.5.0%0Dv1.4.5) (2022-04-19)
 
 
