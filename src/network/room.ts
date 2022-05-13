@@ -49,6 +49,23 @@ export class Room {
         );
     }
 
+    public getAllTracks() {
+        const sessionsTrackInfo = new Map<string, Set<TrackInfo>>();
+        for (const [sessionId, producerIds] of this.sessionMap) {
+            for (const producerId of producerIds.values()) {
+                const trackInfo = this.trackInfoByProducerId.get(producerId);
+                if (!trackInfo) { continue; }
+                let trackInfos = sessionsTrackInfo.get(sessionId);
+                if (!trackInfos) {
+                    trackInfos = new Set<TrackInfo>();
+                    sessionsTrackInfo.set(sessionId, trackInfos)
+                }
+                trackInfos.add(trackInfo)
+            }
+        }
+        return sessionsTrackInfo
+    }
+
     public tracks(): TrackInfo[] { return [...this.trackInfoByProducerId.values()]; }
 
     public getSessionTracks(sessionId: string): TrackInfo[] {

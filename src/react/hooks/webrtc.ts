@@ -58,6 +58,16 @@ export type SfuTrackState = {
 // -> for every stream, setup the on/off events 
 // -> for every stream/track get the state and return that shite
 //
+// export const useTracksInfoStreams = (ctx = useContext(WebRtcContext)) => {
+//   const [renderCount, rerender] = useReducer(i => i + 1, 0);
+//   const trackInfos = ctx.room.getAllTracks();
+
+//   useEffect(() => {
+//     ctx.room.on("tracksUpdated", rerender);
+//     return () => { ctx.room.off("tracksUpdated", rerender);};
+//   }, [ctx.room]);
+// }
+
 export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
   const trackInfos = ctx.room.tracks();
   const audioName = "microphone";
@@ -95,11 +105,12 @@ export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
     });
     console.warn('x. useMemo ===>', { sessionToTracksMap })
     return sessionToTracksMap
-  }, [ctx.room, trackInfos, renderCount])
+  }, [trackInfos])
 
   console.warn('useRoomTracks ===>', { trackInfos, sessionToTracksMap })
 
   const [sessionsTracks, setSessionsTracks] = useState(Array.from(sessionToTracksMap.values()))
+
   // // get the SFU tracks
   // const { sfuId, producerId } = trackInfo;
   // const sfuTrack = await ctx.sfu(sfuId).getTrack(producerId);
@@ -108,7 +119,7 @@ export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
       console.warn('1. useEffect FUNC ===> subscribe to', sessionsTracks.length, 'tracks')
       setLoading(true);
 
-      const newSessionsTracks = (await Promise.allSettled(sessionsTracks.map(async (sessionTracks) => {
+      const newSessionsTracks = (await Promise.all(sessionsTracks.map(async (sessionTracks) => {
         const { sessionId, audioLocation, videoLocation } = sessionTracks;
         let audio
         let video
@@ -124,10 +135,12 @@ export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
           if (location) {
             // get the SFU track
             const { sfuId, producerId } = location;
-            sfuTrack = await ctx.sfu(sfuId).getTrack(producerId);
-            sfuTrack.on("pausedAtSource", rerender);
-            sfuTrack.on("pausedGlobally", rerender);
-            sfuTrack.on("pausedLocally", rerender);
+            try {
+              sfuTrack = await ctx.sfu(sfuId).getTrack(producerId);
+              console.log('+++++++++++++>>>>>sfuTrack =>', sfuTrack)
+            } catch (e) {
+              console.error('Failed to get the SFU track =>', e)
+            }
 
             // update the state
             const isActiveLocally = sfuTrack?.pausedLocally === false;
@@ -165,9 +178,7 @@ export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
           video,
           videoState,
         }
-      }))).map((promise) => {
-        return promise.status === 'fulfilled' ? promise.value : undefined
-      }).filter((x): x is SessionAVStreams => !!x)
+      })))
 
       console.warn('3. useEffect setting newSessionsTracks ===>', { newSessionsTracks })
       setSessionsTracks(newSessionsTracks)
@@ -179,30 +190,18 @@ export const useRoomTracks = (ctx = useContext(WebRtcContext)) => {
 
     return () => {
       console.warn('END. useEffect ===> unsubscribe to', sessionsTracks.length, 'tracks')
-      for (const audioVideoTracks of sessionsTracks) {
-        const { audio, video } = audioVideoTracks
-        if (audio) {
-          audio.off("pausedAtSource", rerender);
-          audio.off("pausedGlobally", rerender);
-          audio.off("pausedLocally", rerender);
-        }
-        if (video) {
-          video.off("pausedAtSource", rerender);
-          video.off("pausedGlobally", rerender);
-          video.off("pausedLocally", rerender);
-        }
-      }
     }
   }, [renderCount])
 
   useEffect(() => {
     ctx.room.on("tracksUpdated", rerender);
+    console.warn(' --------------- TRACKS UPDATED EVENT ----------------')
     return () => { ctx.room.off("tracksUpdated", rerender);};
   }, [ctx.room]);
 
   console.warn('xyz 1. useRoomTracks RETURNS ===>', { sessionToTracksMap, sessionsTracks })
 
-  return { sessionsTracks, loading}
+  return { sessionsTracks, loading }
 };
 
 /// TODO
