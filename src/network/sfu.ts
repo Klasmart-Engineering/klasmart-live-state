@@ -265,15 +265,9 @@ export class SFU {
         }
     }
 
+    @SFU.pauseLock()
     public async pause(id: ProducerId, paused: boolean) {
-        try {
-            return await this.pauseLocks.get(id)?.runExclusive(async () => {
-                console.log(`Acquire PauseLock(${id}), pause`);
-                return await this.request({pause: {id, paused}});
-            });
-        } finally {
-            console.log(`Release PauseLock(${id}), pause`);
-        }
+        return await this.request({pause: {id, paused}});
     }
 
     @SFU.consumerTransportLock()
@@ -531,6 +525,25 @@ export class SFU {
             };
         } finally {
             console.log("Release ConsumerTransportLock");
+        }
+    }
+
+    /// Decorator for ensuring that the track is not being paused at the same time.  Use via @SFU.pauseLock().
+    private static pauseLock() {
+        try {
+            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+                const childFunction = descriptor.value;
+                descriptor.value = function (this: SFU, ...args: any[]) {
+                    const id: ProducerId = args[0];
+                    return this.pauseLocks.get(id)?.runExclusive(async () => {
+                        console.log("Acquire PauseLock");
+                        return childFunction.apply(this, args);
+                    });
+                };
+                return descriptor;
+            };
+        } finally {
+            console.log("Release PauseLock");
         }
     }
 }
