@@ -5,7 +5,7 @@ import {Memoize} from "../memoize";
 import EventEmitter from "eventemitter3";
 import { BuiltinHandlerName } from "mediasoup-client/lib/Device";
 import {Consumer, Producer} from "./track";
-import {Mutex} from "async-mutex";
+import {Mutex, MutexInterface, withTimeout} from "async-mutex";
 import {
     ProducerId,
     ProducerParameters,
@@ -15,9 +15,11 @@ import {
     SfuId,
     Request,
     ResponseMessage,
-    Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors
+    Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors, newProducerID
 } from "./sfuTypes";
 import {Room} from "./room";
+
+const MUTEX_TIMEOUT = 20000;
 
 export class SFU {
     private _requestId = 0;
@@ -37,9 +39,10 @@ export class SFU {
     private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
     public emitter = new EventEmitter<SfuEventMap>();
-    private readonly producerTransportLock = new Mutex();
-    private readonly consumerTransportLock = new Mutex();
-    private readonly pauseLocks = new Map<ProducerId, Mutex>();
+    private readonly producerTransportLock = withTimeout(new Mutex(new Error("ProducerTransportLock")), MUTEX_TIMEOUT, new Error("ProducerTransportLock"));
+    private readonly consumerTransportLock = withTimeout(new Mutex(new Error("ConsumerTransportLock")), MUTEX_TIMEOUT, new Error("ConsumerTransportLock"));
+    private readonly createTrackLock = withTimeout(new Mutex(new Error("CreateTrackLock")), MUTEX_TIMEOUT, new Error("CreateTrackLock"));
+    private readonly pauseLocks = new Map<ProducerId, MutexInterface>();
     private trackUpdateEmitter = new EventEmitter<Record<ProducerId,[]>>();
 
     public constructor(
@@ -59,11 +62,6 @@ export class SFU {
         this.ws.on("statechange", (s) => this.onTransportStateChange(s));
         this.ws.on("message", (d) => this.onTransportMessage(d));
         this.ws.connect().catch(e => console.error(e));
-        this.room.on("trackAdded", async (trackInfo) => {
-            if (!this.producers.has(trackInfo.producerId) && (trackInfo.sfuId === this.id) && !this.consumers.has(trackInfo.producerId)) {
-                await this.consumeTrack(trackInfo.producerId);
-            }
-        });
         this.room.on("trackRemoved", async (id) => {
             const consumer = await this.consumers.get(id);
             consumer?.close();
@@ -81,13 +79,24 @@ export class SFU {
     private generateRequestId() { return `${this._requestId++}` as RequestId; }
 
     public async getTrack(producerId: ProducerId) {
-        const producer = this.producers.get(producerId);
-        if(producer) { return producer; }
+        console.log(`Getting track for Producer(${producerId})`);
+        try {
+            // Ensure we aren't in the process of creating a producer
+            const producer = await this.createTrackLock.runExclusive(async () => {
+                const producer = this.producers.get(producerId);
+                if(producer) { return await producer; }
+                return;
+            });
+            if (producer) return producer;
 
-        const consumer = this.consumers.get(producerId);
-        if(consumer) { return consumer; }
+            const consumer = this.consumers.get(producerId);
+            if(consumer) { return await consumer; }
 
-        return await this.consumeTrack(producerId);
+            return await this.consumeTrack(producerId);
+        } catch (e) {
+            console.error(`Failed to getTrack(${producerId}): `, e);
+        }
+        return;
     }
 
     public async produceTrack(
@@ -101,15 +110,35 @@ export class SFU {
     }
 
     public async consumeTrack(producerId: ProducerId) {
-        if(this.producers.has(producerId)) { throw new Error(`Cannot create consumer for Track(${producerId}), it is already being consumed`); }
-        if (!this.pauseLocks.has(producerId)) this.pauseLocks.set(producerId, new Mutex());
-        return this.pauseLocks.get(producerId)?.runExclusive(async () => {
-            console.log(`Consuming track ${producerId}`);
-            const consumerPromise = this.createConsumer(producerId);
-            this.consumers.set(producerId, consumerPromise);
-            this.trackUpdateEmitter.emit(producerId);
-            return await consumerPromise;
-        });
+        console.log(`Starting to consume track ${producerId}`);
+        // Ensure we are not creating any producers
+        try {
+            return await this.createTrackLock.runExclusive(async () => {
+                console.log("Acquire CreateTrackLock, consumeTrack", producerId);
+                if (this.producers.has(producerId) || this.producerResolvers.has(producerId)) {
+                    console.error(`Cannot consume track ${producerId} because it is locally produced`);
+                    return;
+                }
+                if (this.consumers.has(producerId)) {
+                    console.error(`Cannot create consumer for Track(${producerId}), it is already being consumed`);
+                    return;
+                }
+                if (this.pauseLocks.has(producerId)) {
+                    console.error(`Cannot create consumer for Track(${producerId}), it is already being created`);
+                    return;
+                }
+
+                this.pauseLocks.set(producerId, withTimeout(new Mutex(new Error(`PauseLock: ${producerId}`)), MUTEX_TIMEOUT, new Error(`PauseLock: ${producerId}`)));
+
+                console.log(`Consuming track ${producerId}`);
+                const consumerPromise = this.createConsumer(producerId);
+                this.consumers.set(producerId, consumerPromise);
+                this.trackUpdateEmitter.emit(producerId);
+                return await consumerPromise;
+            });
+        } finally {
+            console.log("Release CreateTrackLock, consumeTrack", producerId);
+        }
     }
 
     public get hasProducers() {
@@ -139,45 +168,69 @@ export class SFU {
         name: string,
         sessionId?: string,
     ) {
-        const producerTransport = await this.producerTransport();
+        try {
+            return await this.createTrackLock.runExclusive(async () => {
+                console.log("Acquire CreateTrackLock, createProducer");
+                const producerTransport = await this.producerTransport();
+                try {
+                    // Ensure we are not changing the producer transport
+                    return await this.producerTransportLock.runExclusive(async () => {
+                        console.log("Acquire ProducerTransportLock, createProducer");
+                        // Ensure we do not try to consume any other tracks before this completes
+                        const { track, encodings } = parameters;
+                        const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
+                        if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`); }
 
-        const { track, encodings } = parameters;
-        const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
-        if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`); }
+                        const mediaSoupProducer = await producerTransport.produce({
+                            track,
+                            encodings,
+                            zeroRtpOnPause: true,
+                            disableTrackOnPause: true,
+                            stopTracks: true,
+                            appData: {
+                                name,
+                                sessionId,
+                            },
+                        });
+                        console.log(`Created producer ${mediaSoupProducer.id}`);
+                        try {
+                            // Ensure we are not currently trying to use this producer
+                            return this.pauseLocks.get(newProducerID(mediaSoupProducer.id))!.runExclusive(async () => {
+                                console.log(`Acquire PauseLock(${mediaSoupProducer.id}), createProducer`);
+                                const producer: Producer = new Producer(
+                                    mediaSoupProducer,
+                                    parameters,
+                                    producerTransport
+                                );
 
-        const mediaSoupProducer = await producerTransport.produce({
-            track,
-            encodings,
-            zeroRtpOnPause: true,
-            disableTrackOnPause: true,
-            stopTracks: true,
-            appData: {
-                name,
-                sessionId,
-            },
-        });
-        const producer: Producer = new Producer(
-            mediaSoupProducer,
-            parameters,
-            producerTransport
-        );
+                                producer.on("pausedLocally", (paused) => {
+                                    if (paused !== undefined) this.pause(producer.id, paused);
+                                });
+                                producer.on("pausedAtSource", (paused) => {
+                                    if (paused !== undefined) this.pause(producer.id, paused);
+                                });
+                                producer.on("pausedGlobally", (paused) => {
+                                    if (paused !== undefined) this.pauseGlobally(producer.id, paused);
+                                });
+                                producer.on("close", () => {
+                                    this.producers.delete(producer.id);
+                                    this.pauseLocks.delete(producer.id);
+                                });
 
-        producer.on("pausedLocally", (paused) => {
-            if (paused !== undefined) this.pause(producer.id, paused);
-        });
-        producer.on("pausedAtSource", (paused) => {
-            if (paused !== undefined) this.pause(producer.id, paused);
-        });
-        producer.on("pausedGlobally", (paused) => {
-            if (paused !== undefined) this.pauseGlobally(producer.id, paused);
-        });
-        producer.on("close", () => {
-            this.producers.delete(producer.id);
-            this.pauseLocks.delete(producer.id);
-        });
-
-        this.resolveProducer(producer);
-        return producer;
+                                this.resolveProducer(producer);
+                                return producer;
+                            });
+                        } finally {
+                            console.log(`Release PauseLock(${mediaSoupProducer.id}), createProducer`);
+                        }
+                    });
+                } finally {
+                    console.log("Release ProducerTransportLock, createProducer");
+                }
+            });
+        } finally {
+            console.log("Release CreateTrackLock, createProducer");
+        }
     }
 
     private resolveProducer(producer: Producer) {
@@ -220,30 +273,46 @@ export class SFU {
     }
 
     public async pauseGlobally(id: ProducerId, paused: boolean) {
-        return this.pauseLocks.get(id)?.runExclusive(async () => {
-            return await this.request({pauseForEveryone: {id, paused}});
-        });
+        try {
+            return await this.pauseLocks.get(id)?.runExclusive(async () => {
+                console.log(`Acquire PauseLock(${id}), pauseGlobally`);
+                return await this.request({pauseForEveryone: {id, paused}});
+            });
+        } finally {
+            console.log(`Release PauseLock(${id}), pauseGlobally`);
+        }
     }
 
     public async pause(id: ProducerId, paused: boolean) {
-        return this.pauseLocks.get(id)?.runExclusive(async () => {
-            return await this.request({pause: {id, paused}});
-        });
+        try {
+            return await this.pauseLocks.get(id)?.runExclusive(async () => {
+                console.log(`Acquire PauseLock(${id}), pause`);
+                return await this.request({pause: {id, paused}});
+            });
+        } finally {
+            console.log(`Release PauseLock(${id}), pause`);
+        }
     }
 
     private async consumerTransport() {
-        return await this.consumerTransportLock.runExclusive(async () => {
-            // Check transport status, return existing transport if it's ok
-            if ((this._consumerTransport && this._consumerTransport.connectionState === "connected") ||
-                (this._consumerTransport && this._consumerTransport.connectionState === "connecting") ||
-                (this._consumerTransport && this._consumerTransport.connectionState === "new")) {
-                return this._consumerTransport;
-            }
-            // Transport state not ok, create new consumer transport
-            const transport = await this.createConsumerTransport();
-            this._consumerTransport = transport;
-            return transport;
-        });
+        try {
+            return await this.consumerTransportLock.runExclusive(async () => {
+                console.log("Acquire ConsumerTransportLock, consumerTransport");
+
+                // Check transport status, return existing transport if it's ok
+                if ((this._consumerTransport && this._consumerTransport.connectionState === "connected") ||
+                    (this._consumerTransport && this._consumerTransport.connectionState === "connecting") ||
+                    (this._consumerTransport && this._consumerTransport.connectionState === "new")) {
+                    return this._consumerTransport;
+                }
+                // Transport state not ok, create new consumer transport
+                const transport = await this.createConsumerTransport();
+                this._consumerTransport = transport;
+                return transport;
+            });
+        } finally {
+            console.log("Release ConsumerTransportLock, consumerTransport");
+        }
     }
 
     private async createConsumerTransport() {
@@ -259,18 +328,23 @@ export class SFU {
     }
 
     private async producerTransport() {
-        return await this.producerTransportLock.runExclusive(async () => {
-            // Check transport status, return existing transport if it's ok
-            if ((this._producerTransport && this._producerTransport.connectionState === "connected") ||
-                (this._producerTransport && this._producerTransport.connectionState === "connecting") ||
-                (this._producerTransport && this._producerTransport.connectionState === "new")) {
-                return this._producerTransport;
-            }
-            // Transport state not ok, create new producer transport
-            const transport = await this.createProducerTransport();
-            this._producerTransport = transport;
-            return transport;
-        });
+        try {
+            return await this.producerTransportLock.runExclusive(async () => {
+                console.log("Acquire ProducerTransportLock, producerTransport");
+                // Check transport status, return existing transport if it's ok
+                if ((this._producerTransport && this._producerTransport.connectionState === "connected") ||
+                    (this._producerTransport && this._producerTransport.connectionState === "connecting") ||
+                    (this._producerTransport && this._producerTransport.connectionState === "new")) {
+                    return this._producerTransport;
+                }
+                // Transport state not ok, create new producer transport
+                const transport = await this.createProducerTransport();
+                this._producerTransport = transport;
+                return transport;
+            });
+        } finally {
+            console.log("Release ProducerTransportLock, producerTransport");
+        }
     }
 
     private async createProducerTransport() {
@@ -292,7 +366,8 @@ export class SFU {
                 if(!id) { return error("Malformed response from SFU"); }
                 const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
                 this.producers.set(id, producerPromise);
-                if (!this.pauseLocks.has(id)) this.pauseLocks.set(id, new Mutex());
+                console.log(`NumProducers: ${this.producers.size}`);
+                if (!this.pauseLocks.has(id)) this.pauseLocks.set(id, withTimeout(new Mutex(new Error(`PauseLock: ${id}`)), MUTEX_TIMEOUT, new Error(`PauseLock: ${id}`)));
 
                 this.trackUpdateEmitter.emit(id);
                 producerPromise.then(p => p.pausedGlobally = producerCreated.pausedGlobally);

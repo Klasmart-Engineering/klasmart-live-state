@@ -113,14 +113,12 @@ export class Room {
     }
 
     private addTrackInfo(trackInfo: TrackInfo) {
-        console.log("addTrackInfo", trackInfo);
         const currentTrackInfo = this.trackInfoByProducerId.get(trackInfo.producerId);
         if(currentTrackInfo && trackInfoEquals(currentTrackInfo, trackInfo)) { return; }
 
         if(trackInfo.sessionId) { this.addProducerIdToSession(trackInfo.sessionId, trackInfo.producerId); }
         this.trackInfoByProducerId.set(trackInfo.producerId, trackInfo);
         this.emitter.emit("tracksUpdated", this.trackInfoByProducerId);
-        this.emitter.emit("trackAdded", trackInfo);
     }
 
     private removeTrackInfo(id: ProducerId) {
@@ -155,7 +153,6 @@ export class Room {
 export type RoomEventMap = {
     close: () => void;
     tracksUpdated: (tracks: Map<ProducerId,TrackInfo>) => void;
-    trackAdded: (track: TrackInfo) => void;
     trackRemoved: (id: ProducerId) => void;
     disconnected: () => void;
     sfuId: (sfuId: SfuId) => void;

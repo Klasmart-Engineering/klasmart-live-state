@@ -49,13 +49,17 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
     const audioName = typeof name === "string" ? `${name}-audio` : name?.audio ?? "microphone";
     const videoName = typeof name === "string" ? `${name}-video` : name?.video ?? "camera";
 
-    const rerender = useRerender();
-    const tracks = ctx.room.getSessionTracks(sessionId);
-    const audioLocation = tracks.find(t => t.name === audioName);
-    const videoLocation = tracks.find(t => t.name === videoName);
-
-    console.log("audioLocation", audioLocation);
-    console.log("videoLocation", videoLocation);
+    const [renderCount, rerender] = useReducer(i => i+1,0);
+    const {audioLocation, videoLocation} = useMemo(
+        () => {
+            const tracks = ctx.room.getSessionTracks(sessionId);
+            return {
+                audioLocation: tracks.find(t => t.name === audioName),
+                videoLocation: tracks.find(t => t.name === videoName),
+            };
+        },
+        [ctx, sessionId, audioName, videoName, renderCount],
+    );
 
     useEffect(() => {
         ctx.room.on("tracksUpdated", rerender);

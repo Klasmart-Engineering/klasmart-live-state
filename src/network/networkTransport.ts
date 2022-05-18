@@ -1,4 +1,4 @@
-import {Mutex} from "async-mutex";
+import {Mutex, withTimeout} from "async-mutex";
 import {EventEmitter} from "eventemitter3";
 
 type Timeout = ReturnType<typeof setTimeout>;
@@ -14,7 +14,7 @@ export class NetworkTransport {
     private receiveTimeoutReference?: Timeout;
     private sendTimeoutReference?: Timeout;
     private ws?: WebSocket;
-    private wsLock = new Mutex();
+    private wsLock = withTimeout(new Mutex(), 10000);
     private emitter = new EventEmitter<NetworkTransportEventMap>();
     public readonly on: NetworkTransport["emitter"]["on"] = (event, listener) => this.emitter.on(event, listener);
     public readonly off: NetworkTransport["emitter"]["off"] = (event, listener) => this.emitter.off(event, listener);
