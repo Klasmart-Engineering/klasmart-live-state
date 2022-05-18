@@ -81,20 +81,33 @@ export class SFU {
     public async getTrack(producerId: ProducerId) {
         console.log(`Getting track for Producer(${producerId})`);
         try {
-            // Ensure we aren't in the process of creating a producer
-            const producer = await this.createTrackLock.runExclusive(async () => {
-                const producer = this.producers.get(producerId);
-                if(producer) { return await producer; }
-                return;
-            });
+            const producer = await this.getProducer(producerId);
             if (producer) return producer;
 
-            const consumer = this.consumers.get(producerId);
-            if(consumer) { return await consumer; }
+            const consumer = await this.getConsumer(producerId);
+            if(consumer) { return consumer; }
 
             return await this.consumeTrack(producerId);
         } catch (e) {
             console.error(`Failed to getTrack(${producerId}): `, e);
+        }
+        return;
+    }
+
+    @SFU.waitForCreateTrackLock()
+    private async getProducer(producerId: ProducerId) {
+        const producer = this.producers.get(producerId);
+        if (producer) {
+            return await producer;
+        }
+        return;
+    }
+
+    @SFU.waitForCreateTrackLock()
+    private async getConsumer(producerId: ProducerId) {
+        const consumer = this.consumers.get(producerId);
+        if (consumer) {
+            return await consumer;
         }
         return;
     }
@@ -478,6 +491,22 @@ export class SFU {
                         console.log("Acquire CreateTrackLock");
                         return childFunction.apply(this, args);
                     });
+                };
+                return descriptor;
+            };
+        } finally {
+            console.log("Release CreateTrackLock");
+        }
+    }
+
+    /// Decorator for waiting for the createTrackLock to finish rather than acquiring it.  Use via @SFU.waitForCreateTrackLock().
+    private static waitForCreateTrackLock() {
+        try {
+            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+                const childFunction = descriptor.value;
+                descriptor.value = async function (this: SFU, ...args: never[]) {
+                    await this.createTrackLock.waitForUnlock();
+                    return childFunction.apply(this, args);
                 };
                 return descriptor;
             };
