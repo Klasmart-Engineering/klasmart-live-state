@@ -163,73 +163,69 @@ export class SFU {
         }
     }
 
+    @SFU.createTrackLock()
     private async createProducer(
         parameters: ProducerParameters,
         name: string,
         sessionId?: string,
     ) {
+        const producerTransport = await this.producerTransport();
         try {
-            return await this.createTrackLock.runExclusive(async () => {
-                console.log("Acquire CreateTrackLock, createProducer");
-                const producerTransport = await this.producerTransport();
+            // Ensure we are not changing the producer transport
+            return await this.producerTransportLock.runExclusive(async () => {
+                console.log("Acquire ProducerTransportLock, createProducer");
+                // Ensure we do not try to consume any other tracks before this completes
+                const {track, encodings} = parameters;
+                const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
+                if (!canProduce) {
+                    console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`);
+                }
+
+                const mediaSoupProducer = await producerTransport.produce({
+                    track,
+                    encodings,
+                    zeroRtpOnPause: true,
+                    disableTrackOnPause: true,
+                    stopTracks: true,
+                    appData: {
+                        name,
+                        sessionId,
+                    },
+                });
+                console.log(`Created producer ${mediaSoupProducer.id}`);
                 try {
-                    // Ensure we are not changing the producer transport
-                    return await this.producerTransportLock.runExclusive(async () => {
-                        console.log("Acquire ProducerTransportLock, createProducer");
-                        // Ensure we do not try to consume any other tracks before this completes
-                        const { track, encodings } = parameters;
-                        const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
-                        if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`); }
+                    // Ensure we are not currently trying to use this producer
+                    return this.pauseLocks.get(newProducerID(mediaSoupProducer.id))!.runExclusive(async () => {
+                        console.log(`Acquire PauseLock(${mediaSoupProducer.id}), createProducer`);
+                        const producer: Producer = new Producer(
+                            mediaSoupProducer,
+                            parameters,
+                            producerTransport
+                        );
 
-                        const mediaSoupProducer = await producerTransport.produce({
-                            track,
-                            encodings,
-                            zeroRtpOnPause: true,
-                            disableTrackOnPause: true,
-                            stopTracks: true,
-                            appData: {
-                                name,
-                                sessionId,
-                            },
+                        producer.on("pausedLocally", (paused) => {
+                            if (paused !== undefined) this.pause(producer.id, paused);
                         });
-                        console.log(`Created producer ${mediaSoupProducer.id}`);
-                        try {
-                            // Ensure we are not currently trying to use this producer
-                            return this.pauseLocks.get(newProducerID(mediaSoupProducer.id))!.runExclusive(async () => {
-                                console.log(`Acquire PauseLock(${mediaSoupProducer.id}), createProducer`);
-                                const producer: Producer = new Producer(
-                                    mediaSoupProducer,
-                                    parameters,
-                                    producerTransport
-                                );
+                        producer.on("pausedAtSource", (paused) => {
+                            if (paused !== undefined) this.pause(producer.id, paused);
+                        });
+                        producer.on("pausedGlobally", (paused) => {
+                            if (paused !== undefined) this.pauseGlobally(producer.id, paused);
+                        });
+                        producer.on("close", () => {
+                            this.producers.delete(producer.id);
+                            this.pauseLocks.delete(producer.id);
+                        });
 
-                                producer.on("pausedLocally", (paused) => {
-                                    if (paused !== undefined) this.pause(producer.id, paused);
-                                });
-                                producer.on("pausedAtSource", (paused) => {
-                                    if (paused !== undefined) this.pause(producer.id, paused);
-                                });
-                                producer.on("pausedGlobally", (paused) => {
-                                    if (paused !== undefined) this.pauseGlobally(producer.id, paused);
-                                });
-                                producer.on("close", () => {
-                                    this.producers.delete(producer.id);
-                                    this.pauseLocks.delete(producer.id);
-                                });
-
-                                this.resolveProducer(producer);
-                                return producer;
-                            });
-                        } finally {
-                            console.log(`Release PauseLock(${mediaSoupProducer.id}), createProducer`);
-                        }
+                        this.resolveProducer(producer);
+                        return producer;
                     });
                 } finally {
-                    console.log("Release ProducerTransportLock, createProducer");
+                    console.log(`Release PauseLock(${mediaSoupProducer.id}), createProducer`);
                 }
             });
         } finally {
-            console.log("Release CreateTrackLock, createProducer");
+            console.log("Release ProducerTransportLock, createProducer");
         }
     }
 
@@ -509,4 +505,24 @@ export class SFU {
         const consumer = await this.consumers.get(producerId);
         if(consumer) { consumer.pausedGlobally = paused; }
     }
+
+    // Decorators
+    /// Decorator for ensuring that only one track is being created at a time.  Mostly to prevent a consumer being created as its local producer is being created.  Use via @createTrackLock().
+    private static createTrackLock() {
+        try {
+            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+                const childFunction = descriptor.value;
+                descriptor.value = function (this: SFU, ...args: never[]) {
+                    return this.createTrackLock.runExclusive(async () => {
+                        console.log("Acquire CreateTrackLock");
+                        return childFunction.apply(this, args);
+                    });
+                };
+                return descriptor;
+            };
+        } finally {
+            console.log("Release CreateTrackLock");
+        }
+    }
+
 }
