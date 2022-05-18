@@ -58,10 +58,14 @@ export class WebRtcManager {
 
     private getSender(sender: TrackSender | undefined, name: string,  track?: Promise<MediaStreamTrack>): TrackSender {
         if (track && !sender) {
-            return new TrackSender (
+            const sender = new TrackSender (
                 name,
-                track
+                track,
+                this.selectProducerSfu(),
+                this.sessionId
             );
+            sender.on("statechange", (state) => {console.log(`${name} sender state: ${state}`);});
+            return sender;
         }
         if (track && sender) {
             sender.replaceTrack(track).catch(e => console.error(e));
@@ -202,7 +206,7 @@ export class WebRtcManager {
         let sfu = this.sfus.get(id);
         if (!sfu) {
             const url = this.getSfuUrl(id);
-            sfu = new SFU(id, url);
+            sfu = new SFU(id, url, this.room);
             sfu.emitter.on("authError", (err) => this.onSfuAuthError(err));
             sfu.emitter.on("connectionError", (err) => this.onSfuConnectionError(err));
             this.sfus.set(id, sfu);

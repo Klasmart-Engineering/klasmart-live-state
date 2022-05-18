@@ -1,5 +1,5 @@
 import {Device, types as MediaSoup} from "mediasoup-client";
-import {TransportState, WSTransport} from "./websocketTransport";
+import {NetworkTransportState, NetworkTransport} from "./networkTransport";
 import {PromiseCompleter} from "./promiseCompleter";
 import {Memoize} from "../memoize";
 import EventEmitter from "eventemitter3";
@@ -17,6 +17,7 @@ import {
     ResponseMessage,
     Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors
 } from "./sfuTypes";
+import {Room} from "./room";
 
 export class SFU {
     private _requestId = 0;
@@ -28,7 +29,7 @@ export class SFU {
     */
     private readonly device = new Device({handlerName: process.env["WEBRTC_DEVICE_HANDLER_NAME"] as BuiltinHandlerName});
     private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>();
-    private readonly ws: WSTransport;
+    private readonly ws: NetworkTransport;
     private retryTimer?: NodeJS.Timeout;
     private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
     private _producerTransport?: MediaSoup.Transport;
@@ -44,19 +45,30 @@ export class SFU {
     public constructor(
         public readonly id: SfuId,
         public readonly url: string,
+        private readonly room: Room,
         private retryDelay = 1000,
         private retryAttempts = 0,
         private retryMaxAttempts = 10,
     ) {
-        this.ws = new WSTransport(
+        this.ws = new NetworkTransport(
             url,
-            (_, d) => this.onTransportMessage(d),
-            t => this.onTransportStateChange(t),
             ["live-sfu"],
             true,
             null,
         );
+        this.ws.on("statechange", (s) => this.onTransportStateChange(s));
+        this.ws.on("message", (d) => this.onTransportMessage(d));
         this.ws.connect().catch(e => console.error(e));
+        this.room.on("trackAdded", async (trackInfo) => {
+            if (!this.producers.has(trackInfo.producerId) && (trackInfo.sfuId === this.id) && !this.consumers.has(trackInfo.producerId)) {
+                await this.consumeTrack(trackInfo.producerId);
+            }
+        });
+        this.room.on("trackRemoved", async (id) => {
+            const consumer = await this.consumers.get(id);
+            consumer?.close();
+            this.consumers.delete(id);
+        });
     }
 
     public onTrackUpdate(id: ProducerId, f: {(id: ProducerId):unknown}) {
@@ -83,18 +95,21 @@ export class SFU {
         name: string,
         sessionId?: string,
     ) {
-        const producer = await this.createProducer(parameters, name, sessionId,);
+        const producer = await this.createProducer(parameters, name, sessionId);
         await this.pause(producer.id, false);
         return producer;
     }
 
     public async consumeTrack(producerId: ProducerId) {
-        if(this.producers.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
-        const consumerPromise = this.createConsumer(producerId);
-        this.consumers.set(producerId, consumerPromise);
+        if(this.producers.has(producerId)) { throw new Error(`Cannot create consumer for Track(${producerId}), it is already being consumed`); }
         if (!this.pauseLocks.has(producerId)) this.pauseLocks.set(producerId, new Mutex());
-        this.trackUpdateEmitter.emit(producerId);
-        return await consumerPromise;
+        return this.pauseLocks.get(producerId)?.runExclusive(async () => {
+            console.log(`Consuming track ${producerId}`);
+            const consumerPromise = this.createConsumer(producerId);
+            this.consumers.set(producerId, consumerPromise);
+            this.trackUpdateEmitter.emit(producerId);
+            return await consumerPromise;
+        });
     }
 
     public get hasProducers() {
@@ -147,7 +162,10 @@ export class SFU {
             producerTransport
         );
 
-        producer.on("pausedLocally" || "pausedAtSource", (paused) => {
+        producer.on("pausedLocally", (paused) => {
+            if (paused !== undefined) this.pause(producer.id, paused);
+        });
+        producer.on("pausedAtSource", (paused) => {
             if (paused !== undefined) this.pause(producer.id, paused);
         });
         producer.on("pausedGlobally", (paused) => {
@@ -185,7 +203,10 @@ export class SFU {
             mediasoupConsumer,
             consumerTransport
         );
-        consumer.on("pausedLocally" || "pausedAtSource", (paused) => {
+        consumer.on("pausedLocally", (paused) => {
+            if (paused !== undefined) this.pause(producerId, paused);
+        });
+        consumer.on("pausedAtSource", (paused) => {
             if (paused !== undefined) this.pause(producerId, paused);
         });
         consumer.on("pausedGlobally", (paused) => {
@@ -199,21 +220,13 @@ export class SFU {
     }
 
     public async pauseGlobally(id: ProducerId, paused: boolean) {
-        const lock = this.pauseLocks.get(id);
-        if (!lock) {
-            throw new Error(`Could not find pause lock for producerId(${id})`);
-        }
-        return await lock.runExclusive(async () => {
+        return this.pauseLocks.get(id)?.runExclusive(async () => {
             return await this.request({pauseForEveryone: {id, paused}});
         });
     }
 
     public async pause(id: ProducerId, paused: boolean) {
-        const lock = this.pauseLocks.get(id);
-        if (!lock) {
-            throw new Error(`Could not find pause lock for producerId(${id})`);
-        }
-        return await lock.runExclusive(async () => {
+        return this.pauseLocks.get(id)?.runExclusive(async () => {
             return await this.request({pause: {id, paused}});
         });
     }
@@ -323,7 +336,7 @@ export class SFU {
         this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
     }
 
-    private onTransportStateChange(state: TransportState) {
+    private onTransportStateChange(state: NetworkTransportState) {
         switch (state) {
         case "error":
             console.info(`Transport state changed to ${state}`);

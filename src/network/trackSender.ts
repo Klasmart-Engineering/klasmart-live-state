@@ -1,23 +1,32 @@
 import { SFU } from "./sfu";
 import {EventEmitter} from "eventemitter3";
 import {Producer} from "./track";
-import {Mutex} from "async-mutex";
+import {Mutex, withTimeout} from "async-mutex";
 
 export type TrackSenderState = "sending" | "not-sending" | "error" | "switching-sfu" | "creating";
 
 export class TrackSender {
-    private stateChangeLock = new Mutex();
+    private stateChangeLock = withTimeout(new Mutex(), 30000);
     private _producer?: Producer;
     private emitter = new EventEmitter<{
         statechange: [TrackSenderState]
     }>();
+    private sfu?: SFU;
+    private _maxFramerate?: number;
+    private _maxWidth?: number;
+    private _maxHeight?: number;
 
     public constructor (
         private readonly name: string,
         private track: Promise<MediaStreamTrack>,
+        private sfuPromise: Promise<SFU>,
         private readonly sessionId?: string,
-        private sfu?: SFU,
-    ) {}
+    ) {
+        this.sfuPromise.then(sfu => {
+            this.sfu = sfu;
+            console.log(this.sfu.id);
+        });
+    }
 
     public on: TrackSender["emitter"]["on"] = (event, callback) => this.emitter.on(event, callback);
     public off: TrackSender["emitter"]["off"] = (event, callback) => this.emitter.off(event, callback);
@@ -47,20 +56,16 @@ export class TrackSender {
         this._maxHeight = max;
     }
 
-    private _maxFramerate?: number;
-    private _maxWidth?: number;
-    private _maxHeight?: number;
-
     public async sending() {
+        if (!this.producer) {
+            await this.creating();
+        }
         await this.stateChangeLock.runExclusive(async () => {
-            console.log(`TrackSender(${this.name}) stateSending`);
             if(this._producer) {
                 this.emitter.emit("statechange", "sending");
                 return await this._producer.start();
             }
         });
-
-        await this.creating();
     }
 
     public async notSending() {
@@ -91,7 +96,11 @@ export class TrackSender {
     private async creating() {
         return await this.stateChangeLock.runExclusive(async () => {
             this.emitter.emit("statechange", "creating");
-            if (!this.sfu) throw new Error("SFU is not set");
+            if (!this.sfu) {
+                console.error("TrackSender: sfu is not set");
+                throw new Error("SFU is not set");
+            }
+            console.log("trackSender: this.sfu.produceTrack");
             this._producer = await this.sfu.produceTrack(
                 await this.getParameter(),
                 this.name,
@@ -100,6 +109,7 @@ export class TrackSender {
             this._producer.once("close", async () => {
                 await this.error();
             });
+            console.log("TrackSender created");
         });
     }
 
@@ -140,7 +150,7 @@ export class TrackSender {
     }
 }
 
-const isOptionalNonZeroPositiveInteger = (x: unknown): x is number|undefined => {
+function isOptionalNonZeroPositiveInteger(x: unknown): x is number|undefined {
     switch(typeof x) {
     case "number":
         return Number.isSafeInteger(x) && x > 0;
@@ -149,4 +159,4 @@ const isOptionalNonZeroPositiveInteger = (x: unknown): x is number|undefined => 
     default:
         return false;
     }
-};
+}

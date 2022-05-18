@@ -17,7 +17,7 @@ import {
 import { messageToClassAction } from "../protobuf/actions";
 import { EventEmitter } from "eventemitter3";
 import { setConnectionState } from "../redux/network";
-import { TransportState, WSTransport } from "./websocketTransport";
+import { TransportState, NetworkTransport } from "./networkTransport";
 import { PromiseCompleter } from "./promiseCompleter";
 
 export type RequestID = NewType<string, "RequestID">;
@@ -25,7 +25,7 @@ export const newRequestId = (value: string): RequestID => value as RequestID;
 
 export class Network<ApplicationState = unknown> {
     private readonly rpc = new PromiseCompleter<void, string, RequestID>();
-    private transport?: WSTransport;
+    private transport?: NetworkTransport;
 
     private readonly actionEmitter = new EventEmitter();
     constructor(
@@ -52,7 +52,7 @@ export class Network<ApplicationState = unknown> {
         if (this.transport) {
             this.transport.disconnect();
         }
-        this.transport = new WSTransport(
+        this.transport = new NetworkTransport(
             url,
             (t, d) => this.onNetworkMessage(t, d),
             (s) => this.onStateChange(s),
@@ -70,7 +70,7 @@ export class Network<ApplicationState = unknown> {
         this.store.dispatch(setConnectionState(state));
     }
 
-    private onNetworkMessage(transport: WSTransport, data: unknown) {
+    private onNetworkMessage(transport: NetworkTransport, data: unknown) {
         if (!(data instanceof ArrayBuffer)) {
             transport.disconnect(4401, "Binary only protocol");
             return;
