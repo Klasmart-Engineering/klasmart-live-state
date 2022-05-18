@@ -254,15 +254,9 @@ export class SFU {
         return consumer;
     }
 
+    @SFU.pauseLock()
     public async pauseGlobally(id: ProducerId, paused: boolean) {
-        try {
-            return await this.pauseLocks.get(id)?.runExclusive(async () => {
-                console.log(`Acquire PauseLock(${id}), pauseGlobally`);
-                return await this.request({pauseForEveryone: {id, paused}});
-            });
-        } finally {
-            console.log(`Release PauseLock(${id}), pauseGlobally`);
-        }
+        return await this.request({pauseForEveryone: {id, paused}});
     }
 
     @SFU.pauseLock()
