@@ -68,11 +68,10 @@ export class TrackSender {
         });
     }
 
+    @TrackSender.stateChangeLock()
     public async notSending() {
-        return await this.stateChangeLock.runExclusive(async () => {
-            this.emitter.emit("statechange", "not-sending");
-            if(this._producer) { await this._producer.stop(); }
-        });
+        this.emitter.emit("statechange", "not-sending");
+        if(this._producer) { await this._producer.stop(); }
     }
 
     public async switchSfu(sfu: SFU) {
@@ -87,30 +86,28 @@ export class TrackSender {
         await this.sending();
     }
 
+    @TrackSender.stateChangeLock()
     public async replaceTrack(track: Promise<MediaStreamTrack>) {
-        await this.stateChangeLock.runExclusive(async () => {
-            this.track = track;
-        });
+        this.track = track;
     }
 
+    @TrackSender.stateChangeLock()
     private async creating() {
-        return await this.stateChangeLock.runExclusive(async () => {
-            this.emitter.emit("statechange", "creating");
-            if (!this.sfu) {
-                console.error("TrackSender: sfu is not set");
-                throw new Error("SFU is not set");
-            }
-            console.log("trackSender: this.sfu.produceTrack");
-            this._producer = await this.sfu.produceTrack(
-                await this.getParameter(),
-                this.name,
-                this.sessionId,
-            );
-            this._producer.once("close", async () => {
-                await this.error();
-            });
-            console.log("TrackSender created");
+        this.emitter.emit("statechange", "creating");
+        if (!this.sfu) {
+            console.error("TrackSender: sfu is not set");
+            throw new Error("SFU is not set");
+        }
+        console.log("trackSender: this.sfu.produceTrack");
+        this._producer = await this.sfu.produceTrack(
+            await this.getParameter(),
+            this.name,
+            this.sessionId,
+        );
+        this._producer.once("close", async () => {
+            await this.error();
         });
+        console.log("TrackSender created");
     }
 
     private async error() {
@@ -147,6 +144,25 @@ export class TrackSender {
         }
 
         return;
+    }
+
+    // Decorators
+    /// Decorator for ensuring the state is only being changed by one method at a time.  Use via @TrackSender.stateChangeLock().
+    private static stateChangeLock() {
+        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            descriptor.value = function (this: TrackSender, ...args: never[]) {
+                try {
+                    return this.stateChangeLock.runExclusive(async () => {
+                        console.log("Acquire StateChangeLock");
+                        return childFunction.apply(this, args);
+                    });
+                } finally {
+                    console.log("Release StateChangeLock");
+                }
+            };
+            return descriptor;
+        };
     }
 }
 
