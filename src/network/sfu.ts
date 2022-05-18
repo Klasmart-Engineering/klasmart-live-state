@@ -323,24 +323,18 @@ export class SFU {
         return transport;
     }
 
+    @SFU.producerTransportLock()
     private async producerTransport() {
-        try {
-            return await this.producerTransportLock.runExclusive(async () => {
-                console.log("Acquire ProducerTransportLock, producerTransport");
-                // Check transport status, return existing transport if it's ok
-                if ((this._producerTransport && this._producerTransport.connectionState === "connected") ||
-                    (this._producerTransport && this._producerTransport.connectionState === "connecting") ||
-                    (this._producerTransport && this._producerTransport.connectionState === "new")) {
-                    return this._producerTransport;
-                }
-                // Transport state not ok, create new producer transport
-                const transport = await this.createProducerTransport();
-                this._producerTransport = transport;
-                return transport;
-            });
-        } finally {
-            console.log("Release ProducerTransportLock, producerTransport");
+        // Check transport status, return existing transport if it's ok
+        if ((this._producerTransport && this._producerTransport.connectionState === "connected") ||
+            (this._producerTransport && this._producerTransport.connectionState === "connecting") ||
+            (this._producerTransport && this._producerTransport.connectionState === "new")) {
+            return this._producerTransport;
         }
+        // Transport state not ok, create new producer transport
+        const transport = await this.createProducerTransport();
+        this._producerTransport = transport;
+        return transport;
     }
 
     private async createProducerTransport() {
@@ -507,7 +501,7 @@ export class SFU {
     }
 
     // Decorators
-    /// Decorator for ensuring that only one track is being created at a time.  Mostly to prevent a consumer being created as its local producer is being created.  Use via @createTrackLock().
+    /// Decorator for ensuring that only one track is being created at a time.  Mostly to prevent a consumer being created as its local producer is being created.  Use via @SFU.createTrackLock().
     private static createTrackLock() {
         try {
             return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
@@ -525,4 +519,21 @@ export class SFU {
         }
     }
 
+    /// Decorator for ensuring that the producer transport is not being changed or used to produce another track.  Use via @SFU.producerTransportLock().
+    private static producerTransportLock() {
+        try {
+            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+                const childFunction = descriptor.value;
+                descriptor.value = function (this: SFU, ...args: never[]) {
+                    return this.producerTransportLock.runExclusive(async () => {
+                        console.log("Acquire ProducerTransportLock");
+                        return childFunction.apply(this, args);
+                    });
+                };
+                return descriptor;
+            };
+        } finally {
+            console.log("Release ProducerTransportLock");
+        }
+    }
 }
