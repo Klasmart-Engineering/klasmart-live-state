@@ -18,6 +18,7 @@ import {
     Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors, newProducerID
 } from "./sfuTypes";
 import {Room} from "./room";
+import {printIfDebugLocksEnabled} from "./utils";
 
 const MUTEX_TIMEOUT = 20000;
 
@@ -485,11 +486,11 @@ export class SFU {
             descriptor.value = function (this: SFU, ...args: never[]) {
                 try {
                     return this.createTrackLock.runExclusive(async () => {
-                        console.log("Acquire CreateTrackLock");
+                        printIfDebugLocksEnabled("Acquire CreateTrackLock");
                         return childFunction.apply(this, args);
                     });
                 } finally {
-                    console.log("Release CreateTrackLock");
+                    printIfDebugLocksEnabled("Release CreateTrackLock");
                 }
             };
             return descriptor;
@@ -515,11 +516,11 @@ export class SFU {
             descriptor.value = function (this: SFU, ...args: never[]) {
                 try {
                     return this.producerTransportLock.runExclusive(async () => {
-                        console.log("Acquire ProducerTransportLock");
+                        printIfDebugLocksEnabled("Acquire ProducerTransportLock");
                         return childFunction.apply(this, args);
                     });
                 } finally {
-                    console.log("Release ProducerTransportLock");
+                    printIfDebugLocksEnabled("Release ProducerTransportLock");
                 }
             };
             return descriptor;
@@ -533,11 +534,11 @@ export class SFU {
             descriptor.value = function (this: SFU, ...args: never[]) {
                 try {
                     return this.consumerTransportLock.runExclusive(async () => {
-                        console.log("Acquire ConsumerTransportLock");
+                        printIfDebugLocksEnabled("Acquire ConsumerTransportLock");
                         return childFunction.apply(this, args);
                     });
                 } finally {
-                    console.log("Release ConsumerTransportLock");
+                    printIfDebugLocksEnabled("Release ConsumerTransportLock");
                 }
             };
             return descriptor;
@@ -553,11 +554,11 @@ export class SFU {
                 const id: ProducerId = args[0];
                 try {
                     return this.pauseLocks.get(id)?.runExclusive(async () => {
-                        console.log("Acquire PauseLock");
+                        printIfDebugLocksEnabled("Acquire PauseLock");
                         return childFunction.apply(this, args);
                     });
                 } finally {
-                    console.log("Release PauseLock");
+                    printIfDebugLocksEnabled("Release PauseLock");
                 }
             };
             return descriptor;

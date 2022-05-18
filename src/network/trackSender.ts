@@ -2,6 +2,7 @@ import { SFU } from "./sfu";
 import {EventEmitter} from "eventemitter3";
 import {Producer} from "./track";
 import {Mutex, withTimeout} from "async-mutex";
+import {printIfDebugLocksEnabled} from "./utils";
 
 export type TrackSenderState = "sending" | "not-sending" | "error" | "switching-sfu" | "creating";
 
@@ -154,11 +155,11 @@ export class TrackSender {
             descriptor.value = function (this: TrackSender, ...args: never[]) {
                 try {
                     return this.stateChangeLock.runExclusive(async () => {
-                        console.log("Acquire StateChangeLock");
+                        printIfDebugLocksEnabled("Acquire StateChangeLock");
                         return childFunction.apply(this, args);
                     });
                 } finally {
-                    console.log("Release StateChangeLock");
+                    printIfDebugLocksEnabled("Release StateChangeLock");
                 }
             };
             return descriptor;
