@@ -110,36 +110,28 @@ export class SFU {
         return producer;
     }
 
+    @SFU.createTrackLock()
     public async consumeTrack(producerId: ProducerId) {
-        console.log(`Starting to consume track ${producerId}`);
-        // Ensure we are not creating any producers
-        try {
-            return await this.createTrackLock.runExclusive(async () => {
-                console.log("Acquire CreateTrackLock, consumeTrack", producerId);
-                if (this.producers.has(producerId) || this.producerResolvers.has(producerId)) {
-                    console.error(`Cannot consume track ${producerId} because it is locally produced`);
-                    return;
-                }
-                if (this.consumers.has(producerId)) {
-                    console.error(`Cannot create consumer for Track(${producerId}), it is already being consumed`);
-                    return;
-                }
-                if (this.pauseLocks.has(producerId)) {
-                    console.error(`Cannot create consumer for Track(${producerId}), it is already being created`);
-                    return;
-                }
-
-                this.pauseLocks.set(producerId, withTimeout(new Mutex(new Error(`PauseLock: ${producerId}`)), MUTEX_TIMEOUT, new Error(`PauseLock: ${producerId}`)));
-
-                console.log(`Consuming track ${producerId}`);
-                const consumerPromise = this.createConsumer(producerId);
-                this.consumers.set(producerId, consumerPromise);
-                this.trackUpdateEmitter.emit(producerId);
-                return await consumerPromise;
-            });
-        } finally {
-            console.log("Release CreateTrackLock, consumeTrack", producerId);
+        if (this.producers.has(producerId) || this.producerResolvers.has(producerId)) {
+            console.error(`Cannot consume track ${producerId} because it is locally produced`);
+            return;
         }
+        if (this.consumers.has(producerId)) {
+            console.error(`Cannot create consumer for Track(${producerId}), it is already being consumed`);
+            return;
+        }
+        if (this.pauseLocks.has(producerId)) {
+            console.error(`Cannot create consumer for Track(${producerId}), it is already being created`);
+            return;
+        }
+
+        this.pauseLocks.set(producerId, withTimeout(new Mutex(new Error(`PauseLock: ${producerId}`)), MUTEX_TIMEOUT, new Error(`PauseLock: ${producerId}`)));
+
+        console.log(`Consuming track ${producerId}`);
+        const consumerPromise = this.createConsumer(producerId);
+        this.consumers.set(producerId, consumerPromise);
+        this.trackUpdateEmitter.emit(producerId);
+        return await consumerPromise;
     }
 
     public get hasProducers() {
