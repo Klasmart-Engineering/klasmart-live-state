@@ -284,25 +284,18 @@ export class SFU {
         }
     }
 
+    @SFU.consumerTransportLock()
     private async consumerTransport() {
-        try {
-            return await this.consumerTransportLock.runExclusive(async () => {
-                console.log("Acquire ConsumerTransportLock, consumerTransport");
-
-                // Check transport status, return existing transport if it's ok
-                if ((this._consumerTransport && this._consumerTransport.connectionState === "connected") ||
+        // Check transport status, return existing transport if it's ok
+        if ((this._consumerTransport && this._consumerTransport.connectionState === "connected") ||
                     (this._consumerTransport && this._consumerTransport.connectionState === "connecting") ||
                     (this._consumerTransport && this._consumerTransport.connectionState === "new")) {
-                    return this._consumerTransport;
-                }
-                // Transport state not ok, create new consumer transport
-                const transport = await this.createConsumerTransport();
-                this._consumerTransport = transport;
-                return transport;
-            });
-        } finally {
-            console.log("Release ConsumerTransportLock, consumerTransport");
+            return this._consumerTransport;
         }
+        // Transport state not ok, create new consumer transport
+        const transport = await this.createConsumerTransport();
+        this._consumerTransport = transport;
+        return transport;
     }
 
     private async createConsumerTransport() {
@@ -528,6 +521,24 @@ export class SFU {
             };
         } finally {
             console.log("Release ProducerTransportLock");
+        }
+    }
+
+    /// Decorator for ensuring that the consumer transport is not being changed or used to consume another track.  Use via @SFU.consumerTransportLock().
+    private static consumerTransportLock() {
+        try {
+            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+                const childFunction = descriptor.value;
+                descriptor.value = function (this: SFU, ...args: never[]) {
+                    return this.consumerTransportLock.runExclusive(async () => {
+                        console.log("Acquire ConsumerTransportLock");
+                        return childFunction.apply(this, args);
+                    });
+                };
+                return descriptor;
+            };
+        } finally {
+            console.log("Release ConsumerTransportLock");
         }
     }
 }
