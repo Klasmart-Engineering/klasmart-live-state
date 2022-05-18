@@ -130,7 +130,6 @@ function useTrackSender (
     const rerender = useRerender();
     useEffect(() => {
         function onStateChange() {
-            console.log("trackSender rerender");
             return rerender();
         }
         trackSender.on("statechange", onStateChange);
