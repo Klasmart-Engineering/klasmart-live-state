@@ -196,36 +196,33 @@ export class SFU {
             },
         });
         console.log(`Created producer ${mediaSoupProducer.id}`);
-        try {
-            // Ensure we are not currently trying to use this producer
-            return this.pauseLocks.get(newProducerID(mediaSoupProducer.id))!.runExclusive(async () => {
-                console.log(`Acquire PauseLock(${mediaSoupProducer.id}), createProducer`);
-                const producer: Producer = new Producer(
-                    mediaSoupProducer,
-                    parameters,
-                    producerTransport
-                );
+        return this.createAndRegisterProducer(newProducerID(mediaSoupProducer.id), mediaSoupProducer, parameters, producerTransport);
+    }
 
-                producer.on("pausedLocally", (paused) => {
-                    if (paused !== undefined) this.pause(producer.id, paused);
-                });
-                producer.on("pausedAtSource", (paused) => {
-                    if (paused !== undefined) this.pause(producer.id, paused);
-                });
-                producer.on("pausedGlobally", (paused) => {
-                    if (paused !== undefined) this.pauseGlobally(producer.id, paused);
-                });
-                producer.on("close", () => {
-                    this.producers.delete(producer.id);
-                    this.pauseLocks.delete(producer.id);
-                });
+    @SFU.pauseLock()
+    private createAndRegisterProducer(_id: ProducerId, mediaSoupProducer: MediaSoup.Producer, parameters: ProducerParameters, producerTransport: MediaSoup.Transport) {
+        const producer: Producer = new Producer(
+            mediaSoupProducer,
+            parameters,
+            producerTransport
+        );
 
-                this.resolveProducer(producer);
-                return producer;
-            });
-        } finally {
-            console.log(`Release PauseLock(${mediaSoupProducer.id}), createProducer`);
-        }
+        producer.on("pausedLocally", async (paused) => {
+            if (paused !== undefined) await this.pause(producer.id, paused);
+        });
+        producer.on("pausedAtSource", async (paused) => {
+            if (paused !== undefined) await this.pause(producer.id, paused);
+        });
+        producer.on("pausedGlobally", async (paused) => {
+            if (paused !== undefined) await this.pauseGlobally(producer.id, paused);
+        });
+        producer.on("close", () => {
+            this.producers.delete(producer.id);
+            this.pauseLocks.delete(producer.id);
+        });
+
+        this.resolveProducer(producer);
+        return producer;
     }
 
     private resolveProducer(producer: Producer) {
@@ -483,90 +480,87 @@ export class SFU {
     // Decorators
     /// Decorator for ensuring that only one track is being created at a time.  Mostly to prevent a consumer being created as its local producer is being created.  Use via @SFU.createTrackLock().
     private static createTrackLock() {
-        try {
-            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-                const childFunction = descriptor.value;
-                descriptor.value = function (this: SFU, ...args: never[]) {
+        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            descriptor.value = function (this: SFU, ...args: never[]) {
+                try {
                     return this.createTrackLock.runExclusive(async () => {
                         console.log("Acquire CreateTrackLock");
                         return childFunction.apply(this, args);
                     });
-                };
-                return descriptor;
+                } finally {
+                    console.log("Release CreateTrackLock");
+                }
             };
-        } finally {
-            console.log("Release CreateTrackLock");
-        }
+            return descriptor;
+        };
     }
 
     /// Decorator for waiting for the createTrackLock to finish rather than acquiring it.  Use via @SFU.waitForCreateTrackLock().
     private static waitForCreateTrackLock() {
-        try {
-            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-                const childFunction = descriptor.value;
-                descriptor.value = async function (this: SFU, ...args: never[]) {
-                    await this.createTrackLock.waitForUnlock();
-                    return childFunction.apply(this, args);
-                };
-                return descriptor;
+        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            descriptor.value = async function (this: SFU, ...args: never[]) {
+                await this.createTrackLock.waitForUnlock();
+                return childFunction.apply(this, args);
             };
-        } finally {
-            console.log("Release CreateTrackLock");
-        }
+            return descriptor;
+        };
     }
 
     /// Decorator for ensuring that the producer transport is not being changed or used to produce another track.  Use via @SFU.producerTransportLock().
     private static producerTransportLock() {
-        try {
-            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-                const childFunction = descriptor.value;
-                descriptor.value = function (this: SFU, ...args: never[]) {
+        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            descriptor.value = function (this: SFU, ...args: never[]) {
+                try {
                     return this.producerTransportLock.runExclusive(async () => {
                         console.log("Acquire ProducerTransportLock");
                         return childFunction.apply(this, args);
                     });
-                };
-                return descriptor;
+                } finally {
+                    console.log("Release ProducerTransportLock");
+                }
             };
-        } finally {
-            console.log("Release ProducerTransportLock");
-        }
+            return descriptor;
+        };
     }
 
     /// Decorator for ensuring that the consumer transport is not being changed or used to consume another track.  Use via @SFU.consumerTransportLock().
     private static consumerTransportLock() {
-        try {
-            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-                const childFunction = descriptor.value;
-                descriptor.value = function (this: SFU, ...args: never[]) {
+        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            descriptor.value = function (this: SFU, ...args: never[]) {
+                try {
                     return this.consumerTransportLock.runExclusive(async () => {
                         console.log("Acquire ConsumerTransportLock");
                         return childFunction.apply(this, args);
                     });
-                };
-                return descriptor;
+                } finally {
+                    console.log("Release ConsumerTransportLock");
+                }
             };
-        } finally {
-            console.log("Release ConsumerTransportLock");
-        }
+            return descriptor;
+        };
+
     }
 
     /// Decorator for ensuring that the track is not being paused at the same time.  Use via @SFU.pauseLock().
     private static pauseLock() {
-        try {
-            return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-                const childFunction = descriptor.value;
-                descriptor.value = function (this: SFU, ...args: any[]) {
-                    const id: ProducerId = args[0];
+        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            descriptor.value = function (this: SFU, ...args: any[]) {
+                const id: ProducerId = args[0];
+                try {
                     return this.pauseLocks.get(id)?.runExclusive(async () => {
                         console.log("Acquire PauseLock");
                         return childFunction.apply(this, args);
                     });
-                };
-                return descriptor;
+                } finally {
+                    console.log("Release PauseLock");
+                }
             };
-        } finally {
-            console.log("Release PauseLock");
-        }
+            return descriptor;
+        };
     }
 }
