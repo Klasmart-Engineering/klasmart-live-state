@@ -15,7 +15,7 @@ import {
     SfuId,
     Request,
     ResponseMessage,
-    Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors, newProducerID
+    Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors, newProducerID, ProduceTrackRequest
 } from "./sfuTypes";
 import {Room} from "./room";
 import {printIfDebugLocksEnabled} from "./utils";
@@ -325,26 +325,36 @@ export class SFU {
         const transport = this.device.createSendTransport(producerTransportCreated);
         transport.on("connect", (connectProducerTransport, callback, error) => this.request({ connectProducerTransport }).then(callback, error));
         transport.on("produce", async (produceTrack, callback, error) => {
-            try {
-                const response = await this.request({ produceTrack });
-                if(!response) { return error("No response from SFU"); }
-                const { producerCreated } = response;
-                if(!producerCreated) { return error("Empty response from SFU"); }
-                const id = producerCreated.producerId;
-                if(!id) { return error("Malformed response from SFU"); }
-                const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
-                this.producers.set(id, producerPromise);
-                console.log(`NumProducers: ${this.producers.size}`);
-                if (!this.pauseLocks.has(id)) this.pauseLocks.set(id, withTimeout(new Mutex(new Error(`PauseLock: ${id}`)), MUTEX_TIMEOUT, new Error(`PauseLock: ${id}`)));
-
-                this.trackUpdateEmitter.emit(id);
-                producerPromise.then(p => p.pausedGlobally = producerCreated.pausedGlobally);
-                callback({id});
-            } catch(e) {
-                error(e);
-            }
+            return await this.onProduce(produceTrack, error, callback);
         });
         return transport;
+    }
+
+    private async onProduce(produceTrack: ProduceTrackRequest | undefined, error: (...args: unknown[]) => unknown, callback: (...args: unknown[]) => unknown) {
+        try {
+            const response = await this.request({produceTrack});
+            if (!response) {
+                return error("No response from SFU");
+            }
+            const {producerCreated} = response;
+            if (!producerCreated) {
+                return error("Empty response from SFU");
+            }
+            const id = producerCreated.producerId;
+            if (!id) {
+                return error("Malformed response from SFU");
+            }
+            const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
+            this.producers.set(id, producerPromise);
+            console.log(`NumProducers: ${this.producers.size}`);
+            if (!this.pauseLocks.has(id)) this.pauseLocks.set(id, withTimeout(new Mutex(new Error(`PauseLock: ${id}`)), MUTEX_TIMEOUT, new Error(`PauseLock: ${id}`)));
+
+            this.trackUpdateEmitter.emit(id);
+            producerPromise.then(p => p.pausedGlobally = producerCreated.pausedGlobally);
+            callback({id});
+        } catch (e) {
+            error(e);
+        }
     }
 
     private sendRtpCapabilities = Memoize(async () => {

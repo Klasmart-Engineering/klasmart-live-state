@@ -36,7 +36,7 @@ export type Request = {
 }
 
 type TransportConnectRequest = { dtlsParameters: MediaSoup.DtlsParameters };
-type ProduceTrackRequest = { kind: MediaSoup.MediaKind, rtpParameters: MediaSoup.RtpParameters, name: string };
+export type ProduceTrackRequest = { kind: MediaSoup.MediaKind, rtpParameters: MediaSoup.RtpParameters, name: string };
 type ConsumeTrackRequest = { producerId: ProducerId };
 type PauseRequest = { paused: boolean, id: ProducerId };
 
