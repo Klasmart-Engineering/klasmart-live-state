@@ -24,7 +24,6 @@ export class MockWS implements Transport {
         }
         // only for sfu requests
         const request: Request = JSON.parse(data);
-        console.log(request);
         if (request.getRouterRtpCapabilities !== undefined) {
             const response = { data: {response: "Got router capabilities"}};
             return handler(response);

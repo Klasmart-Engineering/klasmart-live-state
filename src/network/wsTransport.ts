@@ -66,7 +66,6 @@ export class WSTransport {
     private _wsPromise?: Promise<Transport>;
     private async _connect() {
         if (!this._wsPromise || this.ws?.readyState === Transport.CLOSED || this.ws?.readyState === Transport.CLOSING || !this.ws) {
-            console.log("inside if");
             this._wsPromise = new Promise<Transport>((resolve, reject) => {
                 const ws = this.transportConstructor(this.url, this.protocols);
                 this.registerWSListeners(ws, resolve, reject);
@@ -102,14 +101,10 @@ export class WSTransport {
         });
 
         ws.addEventListener("close", () => this.onClose());
-        ws.addEventListener("message", (e) => {
-            console.log(e);
-            this.onMessage(e.data);
-        });
+        ws.addEventListener("message", (e) => this.onMessage(e.data));
     }
 
     private onMessage(data: string | ArrayBuffer | Blob) {
-        console.log(data);
         this.resetNetworkReceiveTimeout();
         this.onMessageCallback(this, data);
     }
