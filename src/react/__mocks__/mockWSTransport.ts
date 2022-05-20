@@ -1,4 +1,4 @@
-import { Request } from "../../network/sfu";
+import { Request } from "../../network/sfuTypes";
 import { Transport } from "../../network/transport";
 
 export class MockWS implements Transport {
