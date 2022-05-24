@@ -1,5 +1,6 @@
 import {Mutex, withTimeout} from "async-mutex";
 import {EventEmitter} from "eventemitter3";
+import {printIfDebugLocksEnabled} from "./utils";
 
 type Timeout = ReturnType<typeof setTimeout>;
 
@@ -60,42 +61,41 @@ export class NetworkTransport {
         this.resetNetworkSendTimeout();
     }
 
+    @NetworkTransport.wsLock()
     private async _connect() {
-        return await this.wsLock.runExclusive(async () => {
-            if (!this.ws || this.ws?.readyState === WebSocket.CLOSED || this.ws?.readyState === WebSocket.CLOSING) {
-                this.ws = await new Promise((resolve, reject) => {
-                    const ws = new WebSocket(this.url, this.protocols);
-                    ws.binaryType = "arraybuffer";
-                    this.emitter.emit("statechange", "connecting");
-                    const connectionTimer = setTimeout(() => {
-                        reject(new Error("Connection timeout"));
-                        this.emitter.emit("statechange", "error");
-                        if (connectionTimer) {
-                            clearTimeout(connectionTimer);
-                        }
-                        ws.close();
-                    }, 5000);
-                    ws.addEventListener("open", () => {
-                        this.onOpen();
-                        this.ws = ws;
-                        if (connectionTimer) {
-                            clearTimeout(connectionTimer);
-                        }
-                        resolve(ws);
-                    });
-
-                    ws.addEventListener("error", (e) => {
-                        console.error(e);
-                        this.onError();
-                        reject(e);
-                    });
-
-                    ws.addEventListener("close", () => this.onClose());
-                    ws.addEventListener("message", (e) => this.onMessage(e.data));
+        if (!this.ws || this.ws?.readyState === WebSocket.CLOSED || this.ws?.readyState === WebSocket.CLOSING) {
+            this.ws = await new Promise((resolve, reject) => {
+                const ws = new WebSocket(this.url, this.protocols);
+                ws.binaryType = "arraybuffer";
+                this.emitter.emit("statechange", "connecting");
+                const connectionTimer = setTimeout(() => {
+                    reject(new Error("Connection timeout"));
+                    this.emitter.emit("statechange", "error");
+                    if (connectionTimer) {
+                        clearTimeout(connectionTimer);
+                    }
+                    ws.close();
+                }, 5000);
+                ws.addEventListener("open", () => {
+                    this.onOpen();
+                    this.ws = ws;
+                    if (connectionTimer) {
+                        clearTimeout(connectionTimer);
+                    }
+                    resolve(ws);
                 });
-            }
-            return this.ws;
-        });
+
+                ws.addEventListener("error", (e) => {
+                    console.error(e);
+                    this.onError();
+                    reject(e);
+                });
+
+                ws.addEventListener("close", () => this.onClose());
+                ws.addEventListener("message", (e) => this.onMessage(e.data));
+            });
+        }
+        return this.ws;
     }
 
     private onMessage(data: string | ArrayBuffer | Blob) {
@@ -138,5 +138,24 @@ export class NetworkTransport {
             () => this.send(new Uint8Array(0)),
             this.sendKeepAliveMessageInterval
         );
+    }
+
+    /// Decorators
+    // Decorator to make sure the underlying websocket is not being used by another method. Use via @NetworkTransport.wsLock().
+    private static wsLock() {
+        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            descriptor.value = function (this: NetworkTransport, ...args: any[]) {
+                try {
+                    return this.wsLock.runExclusive(async () => {
+                        printIfDebugLocksEnabled("Acquire WsLock");
+                        return childFunction.apply(this, args);
+                    });
+                } finally {
+                    printIfDebugLocksEnabled("Release WsLock");
+                }
+            };
+            return descriptor;
+        };
     }
 }
