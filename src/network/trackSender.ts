@@ -4,29 +4,31 @@ import {Producer} from "./track";
 import {Mutex, withTimeout} from "async-mutex";
 import {printIfDebugLocksEnabled} from "./utils";
 
-export type TrackSenderState = "sending" | "not-sending" | "error" | "switching-sfu" | "creating";
+export type TrackSenderState = "sending" | "not-sending" | "close" | "switching-sfu" | "creating" | "new";
 
 export class TrackSender {
     private stateChangeLock = withTimeout(new Mutex(), 30000);
+    private waitForTrackLock = withTimeout(new Mutex(), 300000);
     private _producer?: Producer;
     private emitter = new EventEmitter<{
-        statechange: [TrackSenderState]
+        statechange: [TrackSenderState],
+        waitForTrack: [],
     }>();
     private sfu?: SFU;
     private _maxFramerate?: number;
     private _maxWidth?: number;
     private _maxHeight?: number;
+    private track?: MediaStreamTrack;
+    private state: TrackSenderState;
 
     public constructor (
         private readonly name: string,
-        private track: Promise<MediaStreamTrack>,
+        private trackPromise: Promise<MediaStreamTrack>,
         private sfuPromise: Promise<SFU>,
         private readonly sessionId?: string,
     ) {
-        this.sfuPromise.then(sfu => {
-            this.sfu = sfu;
-            console.log(this.sfu.id);
-        });
+        this.state = "new";
+        this.emitter.emit("statechange", "new");
     }
 
     public on: TrackSender["emitter"]["on"] = (event, callback) => this.emitter.on(event, callback);
@@ -57,81 +59,87 @@ export class TrackSender {
         this._maxHeight = max;
     }
 
+    @TrackSender.stateChangeLock()
     public async sending() {
-        if (!this.producer) {
-            await this.creating();
-        }
-        await this.stateChangeLock.runExclusive(async () => {
-            if(this._producer) {
-                this.emitter.emit("statechange", "sending");
-                return await this._producer.start();
-            }
-        });
+        // Sending can only be initiated once we are in the "creating" or "not-sending" state.
+        if (this.state === "new" || this.state === "close" || this.state === "switching-sfu" || !this.producer) return;
+
+        await this.producer.start();
+        this.state = "sending";
+        this.emitter.emit("statechange", "sending");
     }
 
     @TrackSender.stateChangeLock()
     public async notSending() {
+        // Not-sending can only be initiated once we are in the "sending" or "creating" state.
+        if (this.state === "new" || this.state === "close" || this.state === "switching-sfu" || !this.producer) return;
+
+        await this.producer.stop();
+        this.state = "not-sending";
         this.emitter.emit("statechange", "not-sending");
-        if(this._producer) { await this._producer.stop(); }
     }
 
+    @TrackSender.stateChangeLock()
     public async switchSfu(sfu: SFU) {
-        await this.stateChangeLock.runExclusive(async () => {
-            this.emitter.emit("statechange", "switching-sfu");
-            if(!this._producer) { return; }
-            this._producer.close();
-            this._producer = undefined;
-            this.sfu = sfu;
-        });
-
-        await this.sending();
+        this.producer?.close();
+        this._producer = undefined;
+        this.track = undefined;
+        this.sfu = sfu;
+        this.state = "switching-sfu";
+        this.emitter.emit("statechange", "switching-sfu");
     }
 
     @TrackSender.stateChangeLock()
     public async replaceTrack(track: Promise<MediaStreamTrack>) {
-        this.track = track;
+        this.trackPromise = track;
     }
 
     @TrackSender.stateChangeLock()
-    private async creating() {
-        this.emitter.emit("statechange", "creating");
+    public async creating() {
+        if (this.state === "sending" || this.state === "not-sending" || this.state === "creating") return;
         if (!this.sfu) {
-            console.error("TrackSender: sfu is not set");
-            throw new Error("SFU is not set");
+            this.sfu = await this.sfuPromise;
         }
-        console.log("trackSender: this.sfu.produceTrack");
         this._producer = await this.sfu.produceTrack(
             await this.getParameter(),
             this.name,
             this.sessionId,
         );
         this._producer.once("close", async () => {
-            await this.error();
+            await this.close();
         });
-        console.log("TrackSender created");
+        this.state = "creating";
+        this.emitter.emit("statechange", "creating");
     }
 
-    private async error() {
-        await this.stateChangeLock.runExclusive(async () => {
-            this.emitter.emit("statechange", "error");
-            this._producer = undefined;
-        });
-
-        await this.creating();
+    @TrackSender.stateChangeLock()
+    public async close() {
+        this.producer?.close();
+        this._producer = undefined;
+        this.track = undefined;
+        this.state = "close";
+        this.emitter.emit("statechange", "close");
     }
 
+    @TrackSender.waitForTrackLock()
     private async getParameter() {
+        if (!this.track || this.track.readyState === "ended") {
+            this.emitter.emit("waitForTrack");
+            this.track = await this.trackPromise;
+        }
         return {
-            track: await this.track,
+            track: this.track,
             encodings: await this.getEncodings(),
         };
     }
 
     private async getEncodings(){
-        const track = await this.track;
-        switch(track.kind) {
+        if (!this.track) {
+            return;
+        }
+        switch(this.track.kind) {
         case "video": {
-            const { width, height } = track.getSettings();
+            const { width, height } = this.track.getSettings();
 
             const scaleWidth = width && this._maxWidth ? width / this._maxWidth : undefined;
             const scaleHeight = height && this._maxHeight ? height / this._maxHeight : undefined;
@@ -160,6 +168,24 @@ export class TrackSender {
                     });
                 } finally {
                     printIfDebugLocksEnabled("Release StateChangeLock");
+                }
+            };
+            return descriptor;
+        };
+    }
+
+    /// Decorator for ensuring that the "waitForTrack" event is only emitted once.  Use via @TrackSender.waitForTrackLock().
+    private static waitForTrackLock() {
+        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+            const childFunction = descriptor.value;
+            descriptor.value = function (this: TrackSender, ...args: never[]) {
+                try {
+                    return this.waitForTrackLock.runExclusive(async () => {
+                        printIfDebugLocksEnabled("Acquire WaitForTrackLock");
+                        return childFunction.apply(this, args);
+                    });
+                } finally {
+                    printIfDebugLocksEnabled("Release WaitForTrackLock");
                 }
             };
             return descriptor;

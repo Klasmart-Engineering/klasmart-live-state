@@ -2,8 +2,8 @@ import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
 import { Track as SfuTrack } from "../../network/track";
-import { TrackSender } from "../../network/trackSender";
-import {audioTrack, videoTrack, WebRtcContext} from "../rtcContext";
+import {TrackSender} from "../../network/trackSender";
+import {WebRtcContext} from "../rtcContext";
 
 export function useWebRtcConstraints(
     ctx = useContext(WebRtcContext)
@@ -27,35 +27,37 @@ export function useWebRtcConstraints(
 }
 
 export function useCamera(ctx = useContext(WebRtcContext)) {
-    const camera = cameraGetter(ctx.cameraConstraints);
-    const sender = ctx.getCamera(camera);
+    console.log("useCamera");
+    const sender = ctx.getCamera();
     return useTrackSender(sender);
 }
 
 export function useMicrophone(ctx = useContext(WebRtcContext)) {
-    const microphone = microphoneGetter(ctx.microphoneConstraints);
-    const sender = ctx.getMicrophone(microphone);
+    console.log("useMicrophone");
+    const sender = ctx.getMicrophone();
     return useTrackSender(sender);
 }
 
 export function useScreenshare(ctx = useContext(WebRtcContext)) {
-    const screen = screenshareGetter(ctx.screenshareConstraints);
-    const sender = ctx.getScreenshare(screen);
+    console.log("useScreenshare");
+    const sender = ctx.getScreenshare();
     return useTrackSender(sender);
 }
 
-export type StreamNamePair = { audio: string, video: string }
+export type StreamNamePair = { audio: string, video: string, screenshare?: string }
 export function useStream(sessionId: string, name?: string | StreamNamePair, ctx = useContext(WebRtcContext)) {
     const audioName = typeof name === "string" ? `${name}-audio` : name?.audio ?? "microphone";
     const videoName = typeof name === "string" ? `${name}-video` : name?.video ?? "camera";
+    const screenshareName = typeof name === "string" ? `${name}-screenshare"` : name?.screenshare ?? "screenshare";
 
     const [renderCount, rerender] = useReducer(i => i+1,0);
-    const {audioLocation, videoLocation} = useMemo(
+    const {audioLocation, videoLocation, screenshareLocation} = useMemo(
         () => {
             const tracks = ctx.room.getSessionTracks(sessionId);
             return {
                 audioLocation: tracks.find(t => t.name === audioName),
                 videoLocation: tracks.find(t => t.name === videoName),
+                screenshareLocation: tracks.find(t => t.name === screenshareName),
             };
         },
         [ctx, sessionId, audioName, videoName, renderCount],
@@ -68,11 +70,20 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
 
     const audio = useTrack(audioLocation, ctx);
     const video = useTrack(videoLocation, ctx);
+    const screenshare = useTrack(screenshareLocation, ctx);
 
     const stream = useMediaStreamTracks(
         audio.track?.track,
         video.track?.track,
+        screenshare.track?.track,
     );
+    if (!video && !audio) {
+        return {
+            audio,
+            video: screenshare,
+            stream
+        };
+    }
     return {
         audio,
         video,
@@ -133,14 +144,23 @@ function useTrackSender (
             return rerender();
         }
         trackSender.on("statechange", onStateChange);
-        return () => { trackSender.off("statechange", onStateChange); };
+
+        return () => {
+            trackSender.off("statechange", onStateChange);
+        };
     }, [trackSender, rerender]);
 
     return {
         ...useTrackState(trackSender.producer),
         track: trackSender.producer?.track,
 
-        setSending: useAsyncCallback((send: boolean) => send ? trackSender.sending() : trackSender.notSending()),
+        setSending: useAsyncCallback(async (send: boolean) => {
+            if (send) {
+                await trackSender.creating();
+                return await trackSender.sending();
+            }
+            return await trackSender.notSending();
+        }),
         globalPause: useAsyncCallback(async (paused: boolean) => {
             const producer = trackSender.producer;
             if (producer) producer.pausedGlobally = paused;
@@ -174,10 +194,6 @@ function useTrackState(
         };
     });
 
-    const isActiveLocally = track?.pausedLocally === false;
-    const isActiveAtProducer = track?.pausedAtSource === false;
-    const isActiveGlobally = isActiveAtProducer && track?.pausedGlobally === false;
-
     if (!track) return {
         isConsumable: false,
         isPausedLocally: true,
@@ -185,8 +201,13 @@ function useTrackState(
         isPausedAtSource: true
     };
 
+    const isActiveLocally = !track.pausedLocally;
+    const isActiveAtProducer = track.pausedAtSource === false;
+    const isActiveGlobally = isActiveAtProducer && track.pausedGlobally === false;
+    const isConsumable = (isActiveLocally && isActiveGlobally) || (track.isMine && isActiveLocally);
+
     return {
-        isConsumable: isActiveGlobally && isActiveLocally,
+        isConsumable,
         isPausedLocally: track.pausedLocally,
         isPausedGlobally: track.pausedGlobally !== false,
         isPausedAtSource: track.pausedAtSource !== false,
@@ -226,29 +247,4 @@ export function useWebrtcClose(
 
 function useRerender() {
     return useReducer(i => i + 1, 0)[1];
-}
-
-async function microphoneGetter(
-    getAudioConstraints?: MediaStreamConstraints["audio"]
-) {
-    const stream = await navigator.mediaDevices.getUserMedia({
-        audio: getAudioConstraints || true,
-    });
-    return audioTrack(stream);
-}
-
-async function cameraGetter(
-    videoConstraints?: MediaStreamConstraints["video"]
-) {
-    const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints || true,
-    });
-    return videoTrack(stream);
-}
-
-async function screenshareGetter(
-    screenshareConstraints?: DisplayMediaStreamConstraints
-) {
-    const stream = await navigator.mediaDevices.getDisplayMedia(screenshareConstraints);
-    return videoTrack(stream);
 }

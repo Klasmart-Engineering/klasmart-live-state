@@ -11,6 +11,7 @@ import {
 import {SFU} from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
 import EventEmitter from "eventemitter3";
+import {deferred} from "../deferred";
 
 enum SfuAuthErrorCodes {
     INVALID = 4400,
@@ -29,6 +30,8 @@ export type WebRtcManagerEventMap = {
     authenticationExpiredError: (error: AuthenticationError) => void;
     unknownError: (error: Error) => void;
 };
+
+export type SenderType = "microphone" | "camera" | "screenshare";
 
 export class WebRtcManager {
     private maxSfuRetries = 10;
@@ -56,43 +59,73 @@ export class WebRtcManager {
         this.room = new Room(wsEndpoint.toString());
     }
 
-    private getSender(sender: TrackSender | undefined, name: string,  track?: Promise<MediaStreamTrack>): TrackSender {
-        if (track && !sender) {
-            const sender = new TrackSender (
-                name,
-                track,
-                this.selectProducerSfu(),
-                this.sessionId
-            );
-            sender.on("statechange", (state) => {console.log(`${name} sender state: ${state}`);});
-            return sender;
-        }
-        if (track && sender) {
-            sender.replaceTrack(track).catch(e => console.error(e));
-            return sender;
-        }
-        if (sender) {
-            return sender;
-        }
-        throw new Error(`Sender ${name} not initialized, initialize the sender by providing a track`);
-    }
-
-    public getCamera(track?: Promise<MediaStreamTrack>): TrackSender {
-        const sender = this.getSender(this.camera, "camera", track);
-        this.camera = sender;
+    private createSender(senderType: SenderType, track: Promise<MediaStreamTrack>) {
+        const sender = new TrackSender(
+            senderType,
+            track,
+            this.selectProducerSfu(),
+            this.sessionId
+        );
+        sender.on("statechange", (state) => {
+            console.log(`${senderType} sender state: ${state}`);
+        });
         return sender;
     }
 
-    public getMicrophone(track?: Promise<MediaStreamTrack>): TrackSender {
-        const sender = this.getSender(this.microphone, "microphone", track);
-        this.microphone = sender;
-        return sender;
+    public getCamera(): TrackSender {
+        if (!this.camera) {
+            console.log("Initializing Camera");
+            const { resolve, promise: track } = deferred<MediaStreamTrack>();
+            this.camera = this.createSender("camera", track);
+            this.camera.on("waitForTrack", async () => {
+                console.log("WaitForTrack: Camera");
+                resolve(await cameraGetter(this.cameraConstraints));
+            });
+            this.camera.on("statechange", async (state) => {
+                if (state === "close" || state === "new" || state === "switching-sfu") {
+                    await this.camera?.creating();
+                }
+            });
+        }
+        return this.camera;
     }
 
-    public getScreenshare(track?: Promise<MediaStreamTrack>): TrackSender {
-        const sender = this.getSender(this.screenshare, "screenshare", track);
-        this.screenshare = sender;
-        return sender;
+    public getMicrophone(): TrackSender {
+        if (!this.microphone) {
+            console.log("Initializing Microphone");
+            const { resolve, promise: track } = deferred<MediaStreamTrack>();
+            this.microphone = this.createSender("microphone", track);
+            this.microphone.on("waitForTrack", async () => {
+                console.log("WaitForTrack: Microphone");
+                resolve(await microphoneGetter(this.microphoneConstraints));
+            });
+            this.microphone.on("statechange", (state) => {
+                if (state === "close" || state === "new" || state === "switching-sfu")
+                    this.microphone?.creating();
+            });
+        }
+        return this.microphone;
+    }
+
+    public getScreenshare(): TrackSender {
+        if (!this.screenshare) {
+            console.log("Initializing Screenshare");
+            const { resolve, promise: track } = deferred<MediaStreamTrack>();
+            this.screenshare = this.createSender("screenshare", track);
+            this.screenshare.on("waitForTrack", async () => {
+                console.log("WaitForTrack: Screenshare");
+                resolve(await screenshareGetter(this.screenshareConstraints));
+            });
+            this.screenshare.on("statechange", async (state) => {
+                if (state === "switching-sfu") {
+                    return this.screenshare?.creating();
+                }
+                if (state === "not-sending") {
+                    return this.screenshare?.close();
+                }
+            });
+        }
+        return this.screenshare;
     }
 
     public async pauseForEveryone({sfuId, producerId}: TrackLocation, paused: boolean) {
@@ -239,5 +272,31 @@ export function firstTrack(tracks: MediaStreamTrack[]) {
     return track;
 }
 
+async function microphoneGetter(
+    getAudioConstraints?: MediaStreamConstraints["audio"]
+) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+        audio: getAudioConstraints || true,
+    });
+    return audioTrack(stream);
+}
+
+async function cameraGetter(
+    videoConstraints?: MediaStreamConstraints["video"]
+) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints || true,
+    });
+    return videoTrack(stream);
+}
+
+async function screenshareGetter(
+    screenshareConstraints?: DisplayMediaStreamConstraints
+) {
+    const stream = await navigator.mediaDevices.getDisplayMedia(screenshareConstraints);
+    return videoTrack(stream);
+}
+
 export const WebRtcContext = React.createContext<WebRtcManager>(null as any);
 WebRtcContext.displayName = "KidsloopLiveWebRTC";
+
