@@ -74,11 +74,9 @@ export class WebRtcManager {
 
     public getCamera(): TrackSender {
         if (!this.camera) {
-            console.log("Initializing Camera");
             const { resolve, promise: track } = deferred<MediaStreamTrack>();
             this.camera = this.createSender("camera", track);
             this.camera.on("waitForTrack", async () => {
-                console.log("WaitForTrack: Camera");
                 resolve(await cameraGetter(this.cameraConstraints));
             });
             this.camera.on("statechange", async (state) => {
@@ -92,11 +90,9 @@ export class WebRtcManager {
 
     public getMicrophone(): TrackSender {
         if (!this.microphone) {
-            console.log("Initializing Microphone");
             const { resolve, promise: track } = deferred<MediaStreamTrack>();
             this.microphone = this.createSender("microphone", track);
             this.microphone.on("waitForTrack", async () => {
-                console.log("WaitForTrack: Microphone");
                 resolve(await microphoneGetter(this.microphoneConstraints));
             });
             this.microphone.on("statechange", (state) => {
@@ -109,11 +105,9 @@ export class WebRtcManager {
 
     public getScreenshare(): TrackSender {
         if (!this.screenshare) {
-            console.log("Initializing Screenshare");
             const { resolve, promise: track } = deferred<MediaStreamTrack>();
             this.screenshare = this.createSender("screenshare-video", track);
             this.screenshare.on("waitForTrack", async () => {
-                console.log("WaitForTrack: Screenshare");
                 resolve(await screenshareGetter(this.screenshareConstraints));
             });
             this.screenshare.on("statechange", async (state) => {

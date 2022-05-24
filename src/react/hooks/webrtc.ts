@@ -27,19 +27,16 @@ export function useWebRtcConstraints(
 }
 
 export function useCamera(ctx = useContext(WebRtcContext)) {
-    console.log("useCamera");
     const sender = ctx.getCamera();
     return useTrackSender(sender);
 }
 
 export function useMicrophone(ctx = useContext(WebRtcContext)) {
-    console.log("useMicrophone");
     const sender = ctx.getMicrophone();
     return useTrackSender(sender);
 }
 
 export function useScreenshare(ctx = useContext(WebRtcContext)) {
-    console.log("useScreenshare");
     const sender = ctx.getScreenshare();
     return useTrackSender(sender);
 }

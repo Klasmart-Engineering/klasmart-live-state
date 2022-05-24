@@ -55,7 +55,6 @@ export class Room {
         this.ws.connect().catch((e) =>  console.error(e));
         const producerIds = this.sessionMap.get(sessionId);
         if(!producerIds) {
-            console.log("No tracks for session", sessionId);
             return [];
         }
         return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId.get(id) ?? []);

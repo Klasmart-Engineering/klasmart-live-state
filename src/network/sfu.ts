@@ -80,7 +80,6 @@ export class SFU {
     private generateRequestId() { return `${this._requestId++}` as RequestId; }
 
     public async getTrack(producerId: ProducerId) {
-        console.log(`Getting track for Producer(${producerId})`);
         try {
             const producer = await this.getProducer(producerId);
             if (producer) return producer;
@@ -131,8 +130,7 @@ export class SFU {
             return;
         }
         if (this.consumers.has(producerId)) {
-            console.error(`Cannot create consumer for Track(${producerId}), it is already being consumed`);
-            return;
+            return this.consumers.get(producerId);
         }
         if (this.pauseLocks.has(producerId)) {
             console.error(`Cannot create consumer for Track(${producerId}), it is already being created`);
