@@ -158,14 +158,14 @@ const useTrackState = (
 
     if (!track) return {
         isConsumable: false,
-        isPausedLocally: false,
+        isPausedLocally: true,
         isPausedGlobally: false,
-        isPausedAtSource: false
+        isPausedAtSource: true
     };
 
     return {
         isConsumable: isActiveGlobally && isActiveLocally,
-        isPausedLocally: track.pausedLocally !== false,
+        isPausedLocally: track.pausedLocally,
         isPausedGlobally: track.pausedGlobally !== false,
         isPausedAtSource: track.pausedAtSource !== false,
     };
