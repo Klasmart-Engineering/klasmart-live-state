@@ -4,7 +4,6 @@
   "description": "",
   "main": "dist/ui.js",
   "types": "dist/ui.d.ts",
-  "type": "module",
   "exports": {
     "./ui": "./dist/ui.js",
     "./server": "./dist/server.js"
