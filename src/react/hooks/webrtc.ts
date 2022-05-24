@@ -48,16 +48,14 @@ export type StreamNamePair = { audio: string, video: string, screenshare?: strin
 export function useStream(sessionId: string, name?: string | StreamNamePair, ctx = useContext(WebRtcContext)) {
     const audioName = typeof name === "string" ? `${name}-audio` : name?.audio ?? "microphone";
     const videoName = typeof name === "string" ? `${name}-video` : name?.video ?? "camera";
-    const screenshareName = typeof name === "string" ? `${name}-screenshare"` : name?.screenshare ?? "screenshare";
 
     const [renderCount, rerender] = useReducer(i => i+1,0);
-    const {audioLocation, videoLocation, screenshareLocation} = useMemo(
+    const {audioLocation, videoLocation} = useMemo(
         () => {
             const tracks = ctx.room.getSessionTracks(sessionId);
             return {
                 audioLocation: tracks.find(t => t.name === audioName),
                 videoLocation: tracks.find(t => t.name === videoName),
-                screenshareLocation: tracks.find(t => t.name === screenshareName),
             };
         },
         [ctx, sessionId, audioName, videoName, renderCount],
@@ -70,20 +68,11 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
 
     const audio = useTrack(audioLocation, ctx);
     const video = useTrack(videoLocation, ctx);
-    const screenshare = useTrack(screenshareLocation, ctx);
 
     const stream = useMediaStreamTracks(
         audio.track?.track,
         video.track?.track,
-        screenshare.track?.track,
     );
-    if (!video && !audio) {
-        return {
-            audio,
-            video: screenshare,
-            stream
-        };
-    }
     return {
         audio,
         video,

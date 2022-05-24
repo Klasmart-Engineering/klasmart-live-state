@@ -31,7 +31,7 @@ export type WebRtcManagerEventMap = {
     unknownError: (error: Error) => void;
 };
 
-export type SenderType = "microphone" | "camera" | "screenshare";
+export type SenderType = "microphone" | "camera" | "screenshare-video";
 
 export class WebRtcManager {
     private maxSfuRetries = 10;
@@ -111,17 +111,19 @@ export class WebRtcManager {
         if (!this.screenshare) {
             console.log("Initializing Screenshare");
             const { resolve, promise: track } = deferred<MediaStreamTrack>();
-            this.screenshare = this.createSender("screenshare", track);
+            this.screenshare = this.createSender("screenshare-video", track);
             this.screenshare.on("waitForTrack", async () => {
                 console.log("WaitForTrack: Screenshare");
                 resolve(await screenshareGetter(this.screenshareConstraints));
             });
             this.screenshare.on("statechange", async (state) => {
-                if (state === "switching-sfu") {
+                if (state === "switching-sfu" || state === "new") {
                     return this.screenshare?.creating();
                 }
                 if (state === "not-sending") {
-                    return this.screenshare?.close();
+                    this.screenshare?.close();
+                    this.screenshare = undefined;
+                    return;
                 }
             });
         }
