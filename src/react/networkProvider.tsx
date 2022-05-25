@@ -17,7 +17,7 @@ export function NetworkProvider<ApplicationState = unknown>({
     const store = useStore<ApplicationState, Action>();
     const value = useMemo(() => new Network(store, selector), [store, selector]);
     return (
-        <NetworkContext.Provider value={value as Network<unknown>}>
+        <NetworkContext.Provider value={value as Network}>
             {children}
         </NetworkContext.Provider>
     );

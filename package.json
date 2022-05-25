@@ -46,6 +46,7 @@
     }
   },
   "dependencies": {
+    "async-mutex": "^0.3.2",
     "eventemitter3": "^4.0.7",
     "immer": "^9.0.6",
     "mediasoup-client": "^3.6.50",
@@ -70,7 +71,6 @@
     "eslint-plugin-react": "^7.27.1",
     "husky": "^7.0.0",
     "jest": "^27.0.6",
-    "prettier": "2.2.1",
     "protobufjs": "^6.11.2",
     "rimraf": "^3.0.2",
     "rollup": "^2.56.3",

@@ -1,8 +1,16 @@
 import EventEmitter from "eventemitter3";
 import {types as MediaSoup} from "mediasoup-client";
-import {newProducerID, ProducerId, ProducerParameters, Result} from "./sfu";
+import {newProducerID, ProducerId, ProducerParameters} from "./sfuTypes";
+import {Mutex} from "async-mutex";
 
 export abstract class Track {
+    protected pauseLock = new Mutex();
+    protected _pausedGlobally?: boolean;
+    protected readonly emitter = new EventEmitter<TrackEventMap>();
+    protected constructor(
+        protected readonly transport: MediaSoup.Transport
+    ) { }
+
     public abstract get id(): ProducerId;
     public abstract get kind(): "audio" | "video" | undefined;
     public abstract get track(): MediaStreamTrack | null | undefined;
@@ -15,7 +23,6 @@ export abstract class Track {
     public abstract get pausedLocally(): boolean
     public abstract get pausedAtSource(): boolean | undefined
 
-    protected _pausedGlobally?: boolean;
     public get pausedGlobally() { return this._pausedGlobally; }
     public set pausedGlobally(pause: boolean | undefined) {
         console.log("consumer set pausedGlobally", pause);
@@ -25,25 +32,35 @@ export abstract class Track {
     }
 
     public readonly on: EventEmitter<TrackEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
+    public readonly once: EventEmitter<TrackEventMap>["once"] = (event, listener) => this.emitter.once(event, listener);
     public readonly off: EventEmitter<TrackEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
-    protected readonly emitter = new EventEmitter<TrackEventMap>();
-
-    protected constructor(
-        public readonly requestBroadcastStateChange: (paused: boolean) => Promise<void|Result>
-    ) { }
 }
 
 export class Producer extends Track {
     public constructor(
         private readonly producer: MediaSoup.Producer,
-        private readonly getParameters: () => Promise<ProducerParameters>,
-        private notifyPause: (paused: boolean) => Promise<void|Result>,
-        requestPauseGlobally: (paused: boolean) => Promise<void|Result>
+        private parameters: ProducerParameters,
+        transport: MediaSoup.Transport
     ) {
-        super(requestPauseGlobally);
+        super(transport);
         console.log("producer constructor", producer);
-        producer.on("transportclose", () => this.stop());
+        producer.on("transportclose", async () => {
+            await this.stop();
+            this.close();
+        });
         producer.on("trackended", () => this.stop());
+        transport.on("connectionstatechange", async (state) => {
+            console.log(`Producer connectionstatechange: ${state}`);
+            if (state === "disconnected" || state === "failed" || state === "closed") {
+                await this.stop();
+                this.close();
+            }
+        });
+        transport.observer.on("close", async () => {
+            console.log("Producer transport close");
+            await this.stop();
+            this.close();
+        });
     }
 
     public get id() { return newProducerID(this.producer.id); }
@@ -55,9 +72,11 @@ export class Producer extends Track {
 
     public async start() {
         if(this.track?.readyState !== "live") {
-            const { track, encodings } = await this.getParameters();
-            const encoding = encodings[0];
-            if(encoding) { await this.producer.setRtpEncodingParameters(encoding); }
+            const { track, encodings } = this.parameters;
+            if (encodings) {
+                const encoding = encodings[0];
+                if(encoding) { await this.producer.setRtpEncodingParameters(encoding); }
+            }
             await this.producer.replaceTrack({track});
         }
         await this.pause(false);
@@ -67,21 +86,23 @@ export class Producer extends Track {
         await this.pause(true);
     }
 
-    public close() { this.producer.close(); }
+    public close() {
+        this.producer.close();
+        this.emitter.emit("close");
+    }
 
     private async pause(paused: boolean) {
-        await Promise.allSettled([
-            this.notifyPause(paused),
+        return await this.pauseLock.runExclusive(async () => {
             paused
                 ? this.producer.pause()
-                : this.producer.resume()
-        ]);
-        this.emitter.emit("pausedLocally", this.pausedLocally);
+                : this.producer.resume();
+            this.emitter.emit("pausedLocally", this.pausedLocally);
+        });
     }
 }
 
 export class Consumer extends Track {
-    static readonly PAUSE_DELAY = 500;
+    static readonly UNPAUSE_DELAY = 500;
     protected _pausedAtSource?: boolean;
     private pauseTimer?: NodeJS.Timeout;
     private pendingPauseStatus?: boolean;
@@ -89,12 +110,23 @@ export class Consumer extends Track {
 
     public constructor (
         private consumer: MediaSoup.Consumer,
-        private notifyPause: (paused: boolean) => Promise<void|Result>,
-        requestPauseGlobally: (paused: boolean) => Promise<void|Result>,
+        transport: MediaSoup.Transport
     ) {
-        super(requestPauseGlobally);
+        super(transport);
         consumer.on("transportclose", () => this.pause(true));
         consumer.on("trackended", () => this.pause(true));
+        transport.on("connectionstatechange", async (state) => {
+            console.log(`Consumer connectionstatechange: ${state}`);
+            if (state === "disconnected" || state === "failed" || state === "closed") {
+                await this.stop();
+                this.close();
+            }
+        });
+        transport.observer.on("close", async () => {
+            console.log("Consumer transport close");
+            await this.stop();
+            this.close();
+        });
     }
 
     public get id() {
@@ -119,47 +151,55 @@ export class Consumer extends Track {
     public async stop() {
         await this.pause(true);
     }
-    public close() { this.consumer.close(); }
+    public close() {
+        this.consumer.close();
+        this.emitter.emit("close");
+    }
 
     private async pause(paused: boolean) {
-        if (this.pauseTimer && this.pendingPauseStatus !== undefined && paused !== this.pendingPauseStatus) {
-            clearTimeout(this.pauseTimer);
-            this.pauseTimer = undefined;
-            this.pendingPauseStatus = undefined;
-        } else if (this.pauseTimer && this.pendingPauseStatus !== undefined && paused === this.pendingPauseStatus) {
-            return;
-        }
-        if(this.pausedLocally === paused) { return; }
+        return await this.pauseLock.runExclusive(async () => {
+            const hasTimer = this.pauseTimer !== undefined && this.pendingPauseStatus !== undefined;
+            const pausedIsPending = this.pendingPauseStatus === paused;
+            const shouldWaitForTimer = hasTimer && pausedIsPending;
+            if (shouldWaitForTimer) {
+                return;
+            }
 
-        // Don't introduce a delay if we haven't changed pause state recently
-        const diff = Date.now() - (this.lastPauseChange ?? 0);
-        this.lastPauseChange = Date.now();
-        console.log(`Consumer.pause: diff=${diff}`);
+            const shouldClearTimer = hasTimer && !pausedIsPending;
+            if (shouldClearTimer) {
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                clearTimeout(this.pauseTimer!);
+                this.pauseTimer = undefined;
+                this.pendingPauseStatus = undefined;
+            }
 
-        if (diff > Consumer.PAUSE_DELAY) {
-            await Promise.allSettled([
-                this.notifyPause(paused),
-                paused
-                    ? this.consumer.pause()
-                    : this.consumer.resume()
-            ]);
-            this.emitter.emit("pausedLocally", this.pausedLocally);
-            return;
-        }
+            if(this.pausedLocally === paused) { return; }
 
-        // If the last pause change was recent, introduce a delay in case the pause state changes again
-        this.pendingPauseStatus = paused;
-        this.pauseTimer = setTimeout(async () => {
-            await Promise.allSettled([
-                this.notifyPause(paused),
-                paused
-                    ? this.consumer.pause()
-                    : this.consumer.resume()
-            ]);
-            this.emitter.emit("pausedLocally", this.pausedLocally);
-            this.pendingPauseStatus = undefined;
-            this.pauseTimer = undefined;
-        }, Consumer.PAUSE_DELAY);
+            const diff = Date.now() - (this.lastPauseChange ?? 0);
+
+            this.lastPauseChange = Date.now();
+
+            // Don't introduce a delay if we haven't changed pause state recently
+            if (diff > Consumer.UNPAUSE_DELAY || paused) {
+                this.pauseConsumer(paused);
+                return;
+            }
+
+            // If the last pause change was recent, introduce a delay in case the pause state changes again
+            this.pendingPauseStatus = paused;
+            this.pauseTimer = setTimeout(async () => {
+                this.pauseConsumer(paused);
+                this.pendingPauseStatus = undefined;
+                this.pauseTimer = undefined;
+            }, Consumer.UNPAUSE_DELAY);
+        });
+    }
+
+    private pauseConsumer(paused: boolean) {
+        paused
+            ? this.consumer.pause()
+            : this.consumer.resume();
+        this.emitter.emit("pausedLocally", paused);
     }
 }
 

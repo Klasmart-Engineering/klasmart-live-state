@@ -2,12 +2,12 @@ import { useContext, useEffect, useMemo, useReducer } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
 import { Track as SfuTrack } from "../../network/track";
-import { TrackSender } from "../../network/trackSender";
-import { WebRtcContext } from "../rtcContext";
+import {TrackSender} from "../../network/trackSender";
+import {WebRtcContext} from "../rtcContext";
 
-export const useWebRtcConstraints = (
+export function useWebRtcConstraints(
     ctx = useContext(WebRtcContext)
-) => {
+) {
     return {
         getCameraConstraints: () => ctx.cameraConstraints,
         setCameraConstraints: (
@@ -24,13 +24,24 @@ export const useWebRtcConstraints = (
             constraints?: DisplayMediaStreamConstraints
         ) => ctx.screenshareConstraints = constraints,
     };
-};
+}
 
-export const useCamera = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.camera);
-export const useMicrophone = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.microphone);
-export const useScreenshare = (ctx = useContext(WebRtcContext)) => useTrackSender(ctx.screenshare);
+export function useCamera(ctx = useContext(WebRtcContext)) {
+    const sender = ctx.getCamera();
+    return useTrackSender(sender);
+}
 
-export type StreamNamePair = { audio: string, video: string }
+export function useMicrophone(ctx = useContext(WebRtcContext)) {
+    const sender = ctx.getMicrophone();
+    return useTrackSender(sender);
+}
+
+export function useScreenshare(ctx = useContext(WebRtcContext)) {
+    const sender = ctx.getScreenshare();
+    return useTrackSender(sender);
+}
+
+export type StreamNamePair = { audio: string, video: string, screenshare?: string }
 export function useStream(sessionId: string, name?: string | StreamNamePair, ctx = useContext(WebRtcContext)) {
     const audioName = typeof name === "string" ? `${name}-audio` : name?.audio ?? "microphone";
     const videoName = typeof name === "string" ? `${name}-video` : name?.video ?? "camera";
@@ -67,10 +78,10 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
 }
 
 
-export const useTrack = (
+export function useTrack(
     location?: TrackLocation,
     ctx = useContext(WebRtcContext),
-) => {
+) {
     const {
         currentPromise: trackPromise,
         result: track,
@@ -101,43 +112,60 @@ export const useTrack = (
         start,
         stop,
         pause: useAsyncCallback(async (paused: boolean) => await (paused ? stop : start).execute()),
-        globalPause: useAsyncCallback(async (paused: boolean) => (await trackPromise)?.requestBroadcastStateChange(paused)),
+        globalPause: useAsyncCallback(async (paused: boolean) => {
+            const track = (await trackPromise);
+            if (track) track.pausedGlobally = paused;
+        }),
     };
-};
+}
 
 export type Track = ReturnType<typeof useTrack>;
 
-const useTrackSender = (
+function useTrackSender (
     trackSender: TrackSender,
-) => {
+) {
     const rerender = useRerender();
     useEffect(() => {
-        trackSender.on("statechange", rerender);
-        return () => { trackSender.off("statechange", rerender); };
+        function onStateChange() {
+            return rerender();
+        }
+        trackSender.on("statechange", onStateChange);
+
+        return () => {
+            trackSender.off("statechange", onStateChange);
+        };
     }, [trackSender, rerender]);
 
     return {
         ...useTrackState(trackSender.producer),
         track: trackSender.producer?.track,
 
-        setSending: useAsyncCallback((send: boolean) => trackSender.changeState(send ? "sending" : "not-sending")),
-        globalPause: useAsyncCallback(async (paused: boolean) => trackSender.producer?.requestBroadcastStateChange(paused)),
+        setSending: useAsyncCallback(async (send: boolean) => {
+            if (send) {
+                await trackSender.creating();
+                return await trackSender.sending();
+            }
+            return await trackSender.notSending();
+        }),
+        globalPause: useAsyncCallback(async (paused: boolean) => {
+            const producer = trackSender.producer;
+            if (producer) producer.pausedGlobally = paused;
+        }),
 
-        getMaxWidth: trackSender.getMaxWidth.bind(trackSender),
-        setMaxWidth: trackSender.setMaxWidth.bind(trackSender),
+        getMaxWidth: () => trackSender.maxWidth,
+        setMaxWidth: (max?: number) => { trackSender.maxWidth = max; },
 
-        getMaxHeight: trackSender.getMaxHeight.bind(trackSender),
-        setMaxHeight: trackSender.setMaxHeight.bind(trackSender),
+        getMaxHeight: () => trackSender.maxHeight,
+        setMaxHeight: (max?: number) => { trackSender.maxHeight = max; },
 
-        getMaxFramerate: trackSender.getMaxFramerate.bind(trackSender),
-        setMaxFramerate: trackSender.setMaxFramerate.bind(trackSender),
-
+        getMaxFramerate: () => trackSender.maxFramerate,
+        setMaxFramerate: (max?: number) => { trackSender.maxFramerate = max; },
     };
-};
+}
 
-const useTrackState = (
+function useTrackState(
     track?: SfuTrack,
-) => {
+) {
     const rerender = useRerender();
 
     useEffect(() => {
@@ -152,10 +180,6 @@ const useTrackState = (
         };
     });
 
-    const isActiveLocally = track?.pausedLocally === false;
-    const isActiveAtProducer = track?.pausedAtSource === false;
-    const isActiveGlobally = isActiveAtProducer && track?.pausedGlobally === false;
-
     if (!track) return {
         isConsumable: false,
         isPausedLocally: true,
@@ -163,17 +187,22 @@ const useTrackState = (
         isPausedAtSource: true
     };
 
+    const isActiveLocally = !track.pausedLocally;
+    const isActiveAtProducer = track.pausedAtSource === false;
+    const isActiveGlobally = isActiveAtProducer && track.pausedGlobally === false;
+    const isConsumable = (isActiveLocally && isActiveGlobally) || (track.isMine && isActiveLocally);
+
     return {
-        isConsumable: isActiveGlobally && isActiveLocally,
+        isConsumable,
         isPausedLocally: track.pausedLocally,
         isPausedGlobally: track.pausedGlobally !== false,
         isPausedAtSource: track.pausedAtSource !== false,
     };
-};
+}
 
-export const useMediaStreamTracks = (
+export function useMediaStreamTracks(
     ...nextTrackSet: Array<MediaStreamTrack | null | undefined>
-) => {
+) {
     const stream = useMemo(() => new MediaStream(), []);
     const previousTrackSet = new Set(stream.getTracks());
 
@@ -188,14 +217,20 @@ export const useMediaStreamTracks = (
     }
 
     return stream;
-};
+}
 
-export const useWebrtcCloseCallback = (
+export function useWebrtcCloseCallback(
     ctx = useContext(WebRtcContext),
-) => useAsyncCallback(() => ctx.close());
+){
+    return useAsyncCallback(() => ctx.close());
+}
 
-export const useWebrtcClose = (
+export function useWebrtcClose(
     ctx = useContext(WebRtcContext),
-) => useAsync(() => ctx.close(), []);
+) {
+    return useAsync(() => ctx.close(), []);
+}
 
-const useRerender = () => useReducer(i => i + 1, 0)[1];
+function useRerender() {
+    return useReducer(i => i + 1, 0)[1];
+}

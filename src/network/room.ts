@@ -1,5 +1,5 @@
-import { ProducerId, SfuId } from "./sfu";
-import { TransportState, WSTransport } from "./websocketTransport";
+import { ProducerId, SfuId } from "./sfuTypes";
+import { NetworkTransportState, NetworkTransport } from "./networkTransport";
 import EventEmitter from "eventemitter3";
 
 export type TrackLocation = { sfuId: SfuId, producerId: ProducerId }
@@ -30,7 +30,7 @@ export class Room {
     public readonly once: Room["emitter"]["once"] = (event, listener) => this.emitter.once(event, listener);
     // The sfu on which the client will attempt to place their tracks.
     private _producerSfuId?: SfuId;
-    private readonly ws: WSTransport;
+    private readonly ws: NetworkTransport;
     private readonly emitter = new EventEmitter<RoomEventMap>();
     private sessionMap = new Map<string, Set<ProducerId>>();
     private trackInfoByProducerId = new Map<ProducerId,TrackInfo>();
@@ -38,15 +38,15 @@ export class Room {
     public constructor(
         public readonly endpoint: string,
     ) {
-        this.ws = new WSTransport(
+        this.ws = new NetworkTransport(
             endpoint,
-            (_, d) => this.onTransportMessage(d),
-            t => this.onTransportStateChange(t),
             undefined,
             true,
             null,
             5000,
         );
+        this.ws.on("statechange", state => this.onTransportStateChange(state));
+        this.ws.on("message", data => this.onTransportMessage(data));
     }
 
     public tracks() { return [...this.trackInfoByProducerId.values()]; }
@@ -54,7 +54,9 @@ export class Room {
     public getSessionTracks(sessionId: string): TrackInfo[] {
         this.ws.connect().catch((e) =>  console.error(e));
         const producerIds = this.sessionMap.get(sessionId);
-        if(!producerIds) { return []; }
+        if(!producerIds) {
+            return [];
+        }
         return [...producerIds.values()].flatMap(id => this.trackInfoByProducerId.get(id) ?? []);
     }
 
@@ -85,11 +87,10 @@ export class Room {
         this._producerSfuId = undefined;
         this.sessionMap.clear();
         this.trackInfoByProducerId.clear();
-        this.emitter.emit("close");        
+        this.emitter.emit("close");
     }
 
-
-    private onTransportStateChange(state: TransportState) {
+    private onTransportStateChange(state: NetworkTransportState) {
         switch(state) {
         case "not-connected":
             this.emitter.emit("disconnected");
@@ -124,6 +125,7 @@ export class Room {
         this.removeProducerIdFromSession(id);
         this.trackInfoByProducerId.delete(id);
         this.emitter.emit("tracksUpdated", this.trackInfoByProducerId);
+        this.emitter.emit("trackRemoved", id);
     }
 
     private addProducerIdToSession(sessionId: string, producerId: ProducerId) {
@@ -150,6 +152,7 @@ export class Room {
 export type RoomEventMap = {
     close: () => void;
     tracksUpdated: (tracks: Map<ProducerId,TrackInfo>) => void;
+    trackRemoved: (id: ProducerId) => void;
     disconnected: () => void;
     sfuId: (sfuId: SfuId) => void;
 }
