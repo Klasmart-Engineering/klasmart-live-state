@@ -1,14 +1,14 @@
 import { createAction, createReducer } from "@reduxjs/toolkit";
 import { combineReducers } from "redux";
 import { DeviceID } from "../models";
-import { TransportState } from "../network/websocketTransport";
+import { NetworkTransportState } from "../network/networkTransport";
 import { ValueOf } from "../types";
 import { classActions } from "./class";
 
-export const setConnectionState = createAction<TransportState>(
+export const setConnectionState = createAction<NetworkTransportState>(
     "setConnectionState"
 );
-export const connectionStatus = createReducer<TransportState>(
+export const connectionStatus = createReducer<NetworkTransportState>(
     "not-connected",
     (builder) => builder.addCase(setConnectionState, (_, { payload }) => payload)
 );

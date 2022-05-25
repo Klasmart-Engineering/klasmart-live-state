@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.7.0](https://github.com/KL-Engineering/kidsloop-live-state/branches/compare/v1.7.0%0Dv1.6.0) (2022-05-24)
+
+
+### ✨ Features
+
+* run unit test github job on commit (#16) ([ce88d66](https://github.com/KL-Engineering/kidsloop-live-state/commits/ce88d665b04112293dd1320c7048ed034f155b23))
+
+
+### 🐛 Bug Fixes
+
+* join without mic/cam but still enable toggle (#20) ([20ac965](https://github.com/KL-Engineering/kidsloop-live-state/commits/20ac96550540bfbf22d4f6faa6b95bc78711bb1b))
+
 ## [1.6.0](https://github.com/KL-Engineering/kidsloop-live-state/branches/compare/v1.6.0%0Dv1.5.0) (2022-05-10)
 
 

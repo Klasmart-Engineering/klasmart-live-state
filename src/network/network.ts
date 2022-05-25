@@ -17,7 +17,7 @@ import {
 import { messageToClassAction } from "../protobuf/actions";
 import { EventEmitter } from "eventemitter3";
 import { setConnectionState } from "../redux/network";
-import { TransportState, WSTransport } from "./websocketTransport";
+import { NetworkTransportState, NetworkTransport } from "./networkTransport";
 import { PromiseCompleter } from "./promiseCompleter";
 
 export type RequestID = NewType<string, "RequestID">;
@@ -25,7 +25,7 @@ export const newRequestId = (value: string): RequestID => value as RequestID;
 
 export class Network<ApplicationState = unknown> {
     private readonly rpc = new PromiseCompleter<void, string, RequestID>();
-    private transport?: WSTransport;
+    private transport?: NetworkTransport;
 
     private readonly actionEmitter = new EventEmitter();
     constructor(
@@ -52,13 +52,13 @@ export class Network<ApplicationState = unknown> {
         if (this.transport) {
             this.transport.disconnect();
         }
-        this.transport = new WSTransport(
+        this.transport = new NetworkTransport(
             url,
-            (t, d) => this.onNetworkMessage(t, d),
-            (s) => this.onStateChange(s),
             ["live"],
             true
         );
+        this.transport.on("statechange", (state) => this.onStateChange(state));
+        this.transport.on("message", (data) => this.onNetworkMessage(data));
         return await this.transport.connect();
     }
 
@@ -66,13 +66,13 @@ export class Network<ApplicationState = unknown> {
         this.transport?.disconnect(code, reason);
     }
 
-    private onStateChange(state: TransportState) {
+    private onStateChange(state: NetworkTransportState) {
         this.store.dispatch(setConnectionState(state));
     }
 
-    private onNetworkMessage(transport: WSTransport, data: unknown) {
+    private onNetworkMessage(data: unknown) {
         if (!(data instanceof ArrayBuffer)) {
-            transport.disconnect(4401, "Binary only protocol");
+            this.transport?.disconnect(4401, "Binary only protocol");
             return;
         }
         try {
@@ -95,7 +95,7 @@ export class Network<ApplicationState = unknown> {
             this.actionEmitter.emit(action.type, action.payload, state);
         } catch (e) {
             console.error(e);
-            transport.disconnect(4400, "Parse error");
+            this.transport?.disconnect(4400, "Parse error");
         }
     }
 
@@ -105,10 +105,9 @@ export class Network<ApplicationState = unknown> {
         }
         const requestId = newRequestId(response.id);
         if (response.error) {
-            this.rpc.reject(requestId, response.error);
-        } else {
-            this.rpc.resolve(requestId);
+            return this.rpc.reject(requestId, response.error);
         }
+        return this.rpc.resolve(requestId);
     }
 
     public async send(command: IClassRequest): Promise<void> {
