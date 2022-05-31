@@ -1,6 +1,6 @@
 import React from "react";
 import { TrackSender } from "../network/trackSender";
-import {SFU, SfuId, SfuAuthErrors, SfuConnectionError} from "../network/sfu";
+import {SFU, SfuId, SfuAuthErrors, SfuConnectionError, DerivedTrackState} from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
 
 
@@ -177,6 +177,19 @@ export class WebRtcManager {
     }
 
     private readonly sfus = new Map<SfuId, SFU>();
+    public get sfuIdsHash() {
+        return Array.from(this.sfus.keys()).sort().join(",");
+    }
+    public subscribeToSfuTrackStateUpdates(callback: (state: DerivedTrackState[]) => void) {
+        for (const sfu of this.sfus.values()) {
+            sfu.emitter.on("trackStatesUpdate", callback);
+        }
+    }
+    public unsubscribeToSfuTrackStateUpdates(callback: (state: DerivedTrackState[]) => void) {
+        for (const sfu of this.sfus.values()) {
+            sfu.emitter.off("trackStatesUpdate", callback);
+        }
+    }
 
     public sfu(id: SfuId) {
         let sfu = this.sfus.get(id);
@@ -199,6 +212,12 @@ export class WebRtcManager {
         const wsEndpoint = new URL(this.baseEndpoint.toString());
         wsEndpoint.pathname += `sfuid/${id}`;
         return wsEndpoint.toString();
+    }
+
+    public getAllSfuTrackStates() {
+        return Array.from(this.sfus.values()).flatMap((sfu) => {
+            return Array.from(sfu.trackStates.values());
+        });
     }
 }
 
