@@ -137,7 +137,21 @@ export class SfuConnectionError implements Error {
         public readonly producerError: boolean = false) {}
 }
 
+export type TrackState = {
+    producerId: ProducerId;
+    kind: "audio" | "video" | undefined;
+    isMine: boolean,
+    isPausedLocally: boolean;
+    isPausedGlobally: boolean;
+    isPausedAtSource: boolean;
+}
+
+export type DerivedTrackState = TrackState & {
+    isConsumable: boolean;
+}
+
 export type SfuEventMap = {
     authError: (error: SfuAuthErrors) => void,
     connectionError: (error: SfuConnectionError) => void,
+    trackStatesUpdate: (state: DerivedTrackState[]) => void,
 }

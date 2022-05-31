@@ -1,6 +1,6 @@
 import EventEmitter from "eventemitter3";
 import {types as MediaSoup} from "mediasoup-client";
-import {newProducerID, ProducerId, ProducerParameters} from "./sfuTypes";
+import {newProducerID, ProducerId, ProducerParameters, TrackState} from "./sfuTypes";
 import {Mutex} from "async-mutex";
 
 export abstract class Track {
@@ -29,6 +29,17 @@ export abstract class Track {
         if(this._pausedGlobally === pause) { return; }
         this._pausedGlobally = pause;
         this.emitter.emit("pausedGlobally", pause);
+    }
+
+    public get state(): TrackState {
+        return {
+            producerId: this.id,
+            kind: this.kind,
+            isMine: this.isMine,
+            isPausedLocally: this.pausedLocally,
+            isPausedAtSource: Boolean(this.pausedAtSource),
+            isPausedGlobally: Boolean(this.pausedGlobally),
+        };
     }
 
     public readonly on: EventEmitter<TrackEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
