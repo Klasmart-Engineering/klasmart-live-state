@@ -1,6 +1,6 @@
 import EventEmitter from "eventemitter3";
 import {types as MediaSoup} from "mediasoup-client";
-import {newProducerID, ProducerId, ProducerParameters, Result} from "./sfu";
+import {newProducerID, ProducerId, ProducerParameters, Result, TrackState} from "./sfu";
 
 export abstract class Track {
     public abstract get id(): ProducerId;
@@ -22,6 +22,17 @@ export abstract class Track {
         if(this._pausedGlobally === pause) { return; }
         this._pausedGlobally = pause;
         this.emitter.emit("pausedGlobally", pause);
+    }
+
+    public get state(): TrackState {
+        return {
+            producerId: this.id,
+            kind: this.kind,
+            isMine: this.isMine,
+            isPausedLocally: this.pausedLocally,
+            isPausedAtSource: Boolean(this.pausedAtSource),
+            isPausedGlobally: Boolean(this.pausedGlobally),
+        };
     }
 
     public readonly on: EventEmitter<TrackEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
@@ -56,7 +67,7 @@ export class Producer extends Track {
     public async start() {
         if(this.track?.readyState !== "live") {
             const { track, encodings } = await this.getParameters();
-            const encoding = encodings[0];
+            const encoding = encodings?.[0];
             if(encoding) { await this.producer.setRtpEncodingParameters(encoding); }
             await this.producer.replaceTrack({track});
         }

@@ -107,6 +107,19 @@ export type ProducerParameters = {
     encodings?: RtpEncodingParameters[],
 }
 
+export type TrackState = {
+    producerId: ProducerId;
+    kind: "audio" | "video" | undefined;
+    isMine: boolean,
+    isPausedLocally: boolean;
+    isPausedGlobally: boolean;
+    isPausedAtSource: boolean;
+}
+
+export type DerivedTrackState = TrackState & {
+    isConsumable: boolean;
+}
+
 export class SFU {
     private _requestId = 0;
     /**
@@ -130,6 +143,47 @@ export class SFU {
     public onTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.on(id, () => f(id)); };
     public offTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.off(id, () => f(id)); };
     private trackUpdateEmitter = new EventEmitter<Record<ProducerId,[]>>();
+
+    public trackStates = new Map<ProducerId, DerivedTrackState>();
+    public updateTrackState(producerId: ProducerId, stateChange: Partial<TrackState> | null) {
+        if (stateChange === null) {
+            this.trackStates.delete(producerId);
+            this.emitUpdateTrackStateEvent();
+            if (process.env["NODE_ENV"] === "development") {
+                console.table(Array.from(this.trackStates.values()));
+            }
+            return this.trackStates;
+        }
+        function deriveState(state: TrackState): DerivedTrackState {
+            const isActiveLocally = state.isPausedLocally === false;
+            const isActiveAtProducer = state.isPausedAtSource === false;
+            const isActiveGlobally = isActiveAtProducer && state.isPausedGlobally === false;
+            return {
+                ...state,
+                isConsumable: isActiveGlobally && isActiveLocally,
+            };
+        }
+        const initialState = {
+            producerId: producerId,
+            isPausedLocally: false,
+            isPausedGlobally: false,
+            isPausedAtSource: false,
+        };
+        const state = this.trackStates.get(producerId);
+        const newState = state
+            ? deriveState({ ...state, ...stateChange } as TrackState)
+            : deriveState({ ...initialState, ...stateChange } as TrackState);
+        this.trackStates.set(producerId, newState);
+        this.emitUpdateTrackStateEvent();
+        if (process.env["NODE_ENV"] === "development") {
+            console.table(Array.from(this.trackStates.values()));
+        }
+        return this.trackStates;
+    }
+
+    public emitUpdateTrackStateEvent() {
+        this.emitter.emit("trackStatesUpdate", Array.from(this.trackStates.values()));
+    }
 
     public constructor(
         public readonly id: SfuId,
@@ -235,6 +289,7 @@ export class SFU {
         } else {
             console.error(`Could not locate resolver while creating Producer(${producer.id})`);
         }
+        this.updateTrackState(producer.id, producer.state);
         return producer;
     }
 
@@ -245,20 +300,28 @@ export class SFU {
         if (!response) { throw new Error(`Received empty response from SFU when trying to consume producerId(${producerId})`); }
         if (!response.consumerCreated) { throw new Error(`Received response without consumer parameters from SFU when trying to consume producerId(${producerId})`); }
         console.log(response);
-        const consumer = await consumerTransport.consume(response.consumerCreated);
+        const mediaSoupConsumer = await consumerTransport.consume(response.consumerCreated);
         await this.pause(producerId, false);
-        return new Consumer(
-            consumer,
+        const consumer = new Consumer(
+            mediaSoupConsumer,
             (paused: boolean) => this.pause(producerId, paused),
             (paused: boolean) => this.pauseGlobally(producerId, paused),
         );
+        this.updateTrackState(consumer.id, consumer.state);
+        return consumer;
     }
 
-    public async pauseGlobally(id: ProducerId, paused: boolean) {
+    public async pauseGlobally(id: ProducerId, paused: boolean, skipUpdateState = false) {
+        if (!skipUpdateState) {
+            this.updateTrackState(id, { isPausedGlobally: paused });
+        }
         return await this.request({pauseForEveryone: {id, paused}});
     }
 
-    public async pause(id: ProducerId, paused: boolean) {
+    public async pause(id: ProducerId, paused: boolean, skipUpdateState = false) {
+        if (!skipUpdateState) {
+            this.updateTrackState(id, { isPausedLocally: paused });
+        }
         return await this.request({pause: {id, paused}});
     }
 
@@ -408,11 +471,14 @@ export class SFU {
     }
 
     private async closeTrack(producerId: ProducerId) {
+        console.log(`Producer(${producerId}): track closed`);
         (await this.producers.get(producerId))?.close();
         this.producers.delete(producerId);
 
         (await this.consumers.get(producerId))?.close();
         this.consumers.delete(producerId);
+
+        this.updateTrackState(producerId, null);
     }
 
     private async onSourcePaused({ producerId, paused }: PauseEvent) {
@@ -421,16 +487,23 @@ export class SFU {
         if(consumer) {
             consumer.pausedAtSource = paused;
             paused ? await consumer.stop() : await consumer.start();
+            this.updateTrackState(producerId, consumer.state);
         }
     }
 
     private async onGloballyPaused({ producerId, paused }: PauseEvent) {
         console.log(`Producer(${producerId}): Global pause (${producerId},${paused})`);
         const producer = await this.producers.get(producerId);
-        if(producer) { producer.pausedGlobally = paused; }
+        if(producer) { 
+            producer.pausedGlobally = paused;
+            this.updateTrackState(producerId, producer.state);
+        }
 
         const consumer = await this.consumers.get(producerId);
-        if(consumer) { consumer.pausedGlobally = paused; }
+        if(consumer) {
+            consumer.pausedGlobally = paused;
+            this.updateTrackState(producerId, consumer.state);
+        }
     }
 }
 
@@ -472,4 +545,6 @@ export class SfuConnectionError implements Error {
 export type SfuEventMap = {
     authError: (error: SfuAuthErrors) => void,
     connectionError: (error: SfuConnectionError) => void,
+    trackStatesUpdate: (state: DerivedTrackState[]) => void,
 }
+
