@@ -1,6 +1,7 @@
-import { useContext, useEffect, useMemo, useReducer } from "react";
+import { useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useAsync, useAsyncCallback } from "react-async-hook";
 import { TrackLocation } from "../../network/room";
+import { ProducerId, DerivedTrackState, } from "../../network/sfuTypes";
 import { Track as SfuTrack } from "../../network/track";
 import {TrackSender} from "../../network/trackSender";
 import {WebRtcContext} from "../rtcContext";
@@ -10,19 +11,16 @@ export function useWebRtcConstraints(
 ) {
     return {
         getCameraConstraints: () => ctx.cameraConstraints,
-        setCameraConstraints: (
-            constraints?: MediaStreamConstraints["audio"]
-        ) => ctx.cameraConstraints = constraints,
+        setCameraConstraints: (constraints?: MediaStreamConstraints["audio"]) =>
+            (ctx.cameraConstraints = constraints),
 
         getMicrophoneConstraints: () => ctx.microphoneConstraints,
-        setMicrophoneConstraints: (
-            constraints?: MediaStreamConstraints["video"]
-        ) => ctx.microphoneConstraints = constraints,
+        setMicrophoneConstraints: (constraints?: MediaStreamConstraints["video"]) =>
+            (ctx.microphoneConstraints = constraints),
 
         getScreenshareConstraints: () => ctx.screenshareConstraints,
-        setScreenshareConstraints: (
-            constraints?: DisplayMediaStreamConstraints
-        ) => ctx.screenshareConstraints = constraints,
+        setScreenshareConstraints: (constraints?: DisplayMediaStreamConstraints) =>
+            (ctx.screenshareConstraints = constraints),
     };
 }
 
@@ -40,6 +38,45 @@ export function useScreenshare(ctx = useContext(WebRtcContext)) {
     const sender = ctx.getScreenshare();
     return useTrackSender(sender);
 }
+
+export type TrackSessionState = DerivedTrackState & {
+    sessionId?: string;
+    name?: string;
+};
+export function useTrackStates(ctx = useContext(WebRtcContext)) {
+    const initialState = ctx.getAllSfuTrackStates();
+    const [state, setState] = useState(initialState);
+
+    useEffect(() => {
+        ctx.subscribeToSfuTrackStateUpdates(
+            (newState) => void setState(newState)
+        );
+        return () => {
+            ctx.unsubscribeToSfuTrackStateUpdates(
+                (newState) => void setState(newState)
+            );
+        };
+    }, [ctx.sfuIdsHash]);
+
+    const stateWithSessions: TrackSessionState[] = state.map((track) => {
+        const info = ctx.room.getProducerTrackInfo(track.producerId);
+        return {
+            ...track,
+            sessionId: info?.sessionId,
+            name: info?.name,
+        };
+    });
+
+    return stateWithSessions;
+}
+
+export type SfuTrackState = {
+  producerId: ProducerId | undefined;
+  isConsumable: boolean;
+  isPausedLocally: boolean;
+  isPausedGlobally: boolean;
+  isPausedAtSource: boolean;
+};
 
 export type StreamNamePair = { audio: string, video: string, screenshare?: string }
 export function useStream(sessionId: string, name?: string | StreamNamePair, ctx = useContext(WebRtcContext)) {
@@ -60,16 +97,15 @@ export function useStream(sessionId: string, name?: string | StreamNamePair, ctx
 
     useEffect(() => {
         ctx.room.on("tracksUpdated", rerender);
-        return () => { ctx.room.off("tracksUpdated", rerender);};
+        return () => {
+            ctx.room.off("tracksUpdated", rerender);
+        };
     }, [ctx.room]);
 
     const audio = useTrack(audioLocation, ctx);
     const video = useTrack(videoLocation, ctx);
 
-    const stream = useMediaStreamTracks(
-        audio.track?.track,
-        video.track?.track,
-    );
+    const stream = useMediaStreamTracks(audio.track?.track, video.track?.track);
     return {
         audio,
         video,
@@ -93,12 +129,16 @@ export function useTrack(
     }, [location]);
 
     useEffect(() => {
-        if(!location) { return; }
-        const {sfuId, producerId} = location;
+        if (!location) {
+            return;
+        }
+        const { sfuId, producerId } = location;
         const sfu = ctx.sfu(sfuId);
         const callback = () => execute(location);
         sfu.onTrackUpdate(producerId, callback);
-        return () => { sfu.offTrackUpdate(producerId, callback); };
+        return () => {
+            sfu.offTrackUpdate(producerId, callback);
+        };
     });
 
     const start = useAsyncCallback(async () => (await trackPromise)?.start());
@@ -169,7 +209,9 @@ function useTrackState(
     const rerender = useRerender();
 
     useEffect(() => {
-        if(!track) { return; }
+        if (!track) {
+            return;
+        }
         track.on("pausedAtSource", rerender);
         track.on("pausedGlobally", rerender);
         track.on("pausedLocally", rerender);
@@ -206,13 +248,17 @@ export function useMediaStreamTracks(
     const stream = useMemo(() => new MediaStream(), []);
     const previousTrackSet = new Set(stream.getTracks());
 
-    for(const track of nextTrackSet) {
-        if(!track || track.readyState !== "live") { continue; }
+    for (const track of nextTrackSet) {
+        if (!track || track.readyState !== "live") {
+            continue;
+        }
         const isNewTrack = !previousTrackSet.delete(track);
-        if(isNewTrack) { stream.addTrack(track); }
+        if (isNewTrack) {
+            stream.addTrack(track);
+        }
     }
 
-    for(const track of previousTrackSet) {
+    for (const track of previousTrackSet) {
         stream.removeTrack(track);
     }
 

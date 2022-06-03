@@ -15,12 +15,14 @@ import {
     SfuId,
     Request,
     ResponseMessage,
-    Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors, newProducerID, ProduceTrackRequest
+    Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors, newProducerID, ProduceTrackRequest, TrackState, DerivedTrackState,
 } from "./sfuTypes";
 import {Room} from "./room";
 import {printIfDebugLocksEnabled} from "./utils";
 
 const MUTEX_TIMEOUT = 20000;
+
+
 
 export class SFU {
     private _requestId = 0;
@@ -45,6 +47,42 @@ export class SFU {
     private readonly createTrackLock = withTimeout(new Mutex(new Error("CreateTrackLock")), MUTEX_TIMEOUT, new Error("CreateTrackLock"));
     private readonly pauseLocks = new Map<ProducerId, MutexInterface>();
     private trackUpdateEmitter = new EventEmitter<Record<ProducerId,[]>>();
+
+    public trackStates = new Map<ProducerId, DerivedTrackState>();
+    public updateTrackState(producerId: ProducerId, stateChange: Partial<TrackState>) {
+        function deriveState(state: TrackState): DerivedTrackState {
+            const isActiveLocally = state.isPausedLocally === false;
+            const isActiveAtProducer = state.isPausedAtSource === false;
+            const isActiveGlobally = isActiveAtProducer && state.isPausedGlobally === false;
+            return {
+                ...state,
+                isConsumable: isActiveGlobally && isActiveLocally,
+            };
+        }
+        const initialState = {
+            producerId: producerId,
+            isPausedLocally: false,
+            isPausedGlobally: false,
+            isPausedAtSource: false,
+        };
+        const state = this.trackStates.get(producerId);
+        const newState = 
+            state ? 
+                deriveState(
+                { ...state, ...stateChange } as TrackState
+                ) 
+                : 
+                deriveState(
+                { ...initialState, ...stateChange } as TrackState
+                );
+        this.trackStates.set(producerId, newState);
+        this.emitUpdateTrackStateEvent();
+        return this.trackStates;
+    }
+
+    public emitUpdateTrackStateEvent() {
+        this.emitter.emit("trackStatesUpdate", Array.from(this.trackStates.values()));
+    }
 
     public constructor(
         public readonly id: SfuId,
@@ -221,6 +259,7 @@ export class SFU {
         });
 
         this.resolveProducer(producer);
+        this.updateTrackState(producer.id, producer.state);
         return producer;
     }
 
@@ -260,16 +299,23 @@ export class SFU {
             this.consumers.delete(producerId);
             this.pauseLocks.delete(producerId);
         });
+        this.updateTrackState(consumer.id, consumer.state);
         return consumer;
     }
 
     @SFU.pauseLock()
-    public async pauseGlobally(id: ProducerId, paused: boolean) {
+    public async pauseGlobally(id: ProducerId, paused: boolean, skipUpdateState = false) {
+        if (!skipUpdateState) {
+            this.updateTrackState(id, { isPausedGlobally: paused });
+        }
         return await this.request({pauseForEveryone: {id, paused}});
     }
 
     @SFU.pauseLock()
-    public async pause(id: ProducerId, paused: boolean) {
+    public async pause(id: ProducerId, paused: boolean, skipUpdateState = false) {
+        if (!skipUpdateState) {
+            this.updateTrackState(id, { isPausedLocally: paused });
+        }
         return await this.request({pause: {id, paused}});
     }
 
@@ -461,11 +507,15 @@ export class SFU {
     }
 
     private async closeTrack(producerId: ProducerId) {
+        console.log(`Producer(${producerId}): track closed`);
         (await this.producers.get(producerId))?.close();
         this.producers.delete(producerId);
 
         (await this.consumers.get(producerId))?.close();
         this.consumers.delete(producerId);
+
+        this.trackStates.delete(producerId);
+        this.emitUpdateTrackStateEvent();
     }
 
     private async onSourcePaused({ producerId, paused }: PauseEvent) {
@@ -474,16 +524,23 @@ export class SFU {
         if(consumer) {
             consumer.pausedAtSource = paused;
             paused ? await consumer.stop() : await consumer.start();
+            this.updateTrackState(producerId, consumer.state);
         }
     }
 
     private async onGloballyPaused({ producerId, paused }: PauseEvent) {
         console.log(`Producer(${producerId}): Global pause (${producerId},${paused})`);
         const producer = await this.producers.get(producerId);
-        if(producer) { producer.pausedGlobally = paused; }
+        if(producer) { 
+            producer.pausedGlobally = paused;
+            this.updateTrackState(producerId, producer.state);
+        }
 
         const consumer = await this.consumers.get(producerId);
-        if(consumer) { consumer.pausedGlobally = paused; }
+        if(consumer) {
+            consumer.pausedGlobally = paused;
+            this.updateTrackState(producerId, consumer.state);
+        }
     }
 
     // Decorators
