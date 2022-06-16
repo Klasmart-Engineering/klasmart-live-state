@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.8.0](https://github.com/KL-Engineering/kidsloop-live-state/branches/compare/v1.8.0%0Dv1.7.0) (2022-06-16)
+
+
+### ✨ Features
+
+* **sfu-146:** use track states hook (#17) ([ccb8ad0](https://github.com/KL-Engineering/kidsloop-live-state/commits/ccb8ad056c7f35c65d37213f266e2994004ab37d))
+
 ## [1.7.0](https://github.com/KL-Engineering/kidsloop-live-state/branches/compare/v1.7.0%0Dv1.6.0) (2022-05-24)
 
 
