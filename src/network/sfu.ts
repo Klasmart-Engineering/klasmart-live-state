@@ -1,28 +1,111 @@
 import {Device, types as MediaSoup} from "mediasoup-client";
-import {NetworkTransportState, NetworkTransport} from "./networkTransport";
+import {NewType} from "../types";
+import {TransportState, WSTransport} from "./websocketTransport";
 import {PromiseCompleter} from "./promiseCompleter";
 import {Memoize} from "../memoize";
 import EventEmitter from "eventemitter3";
 import { BuiltinHandlerName } from "mediasoup-client/lib/Device";
 import {Consumer, Producer} from "./track";
-import {Mutex, MutexInterface, withTimeout} from "async-mutex";
-import {
-    ProducerId,
-    ProducerParameters,
-    RequestId,
-    RequestMessage,
-    Result,
-    SfuId,
-    Request,
-    ResponseMessage,
-    Response, ClientId, PauseEvent, SfuEventMap, SfuConnectionError, SfuAuthErrors, newProducerID, ProduceTrackRequest, TrackState, DerivedTrackState,
-} from "./sfuTypes";
-import {Room} from "./room";
-import {printIfDebugLocksEnabled} from "./utils";
+import { RtpEncodingParameters } from "mediasoup-client/lib/RtpParameters";
 
-const MUTEX_TIMEOUT = 20000;
+export type SfuId = NewType<string, "sfuId">
+export const newSfuID = (id: string) => id as SfuId;
 
+export type ProducerId = NewType<string, "producerId">
+export const newProducerID = (id: string) => id as ProducerId;
 
+export type ConsumerId = NewType<string, "consumerId">
+export const newConsumerID = (id: string) => id as ConsumerId;
+
+export type RequestId = NewType<string, "requestId">
+export const newRequestID = (id: string) => id as RequestId;
+
+export type RequestMessage = {
+    id: RequestId,
+    request: Request,
+}
+
+type Request = {
+    getRouterRtpCapabilities?: unknown;
+    createProducerTransport?: unknown;
+    connectProducerTransport?: TransportConnectRequest;
+    produceTrack?: ProduceTrackRequest;
+
+    setRtpCapabilities?: MediaSoup.RtpCapabilities;
+    createConsumerTransport?: unknown;
+    connectConsumerTransport?: TransportConnectRequest;
+    consumeTrack?: ConsumeTrackRequest;
+
+    pause?: PauseRequest;
+    pauseForEveryone?: PauseRequest;
+    endRoom?: unknown;
+}
+
+type TransportConnectRequest = { dtlsParameters: MediaSoup.DtlsParameters };
+type ProduceTrackRequest = { kind: MediaSoup.MediaKind, rtpParameters: MediaSoup.RtpParameters, name: string };
+type ConsumeTrackRequest = { producerId: ProducerId };
+type PauseRequest = { paused: boolean, id: ProducerId };
+
+export type ResponseMessage = {
+    clientId?: ClientId,
+    response?: Response,
+
+    pausedSource?: PauseEvent,
+    pausedGlobally?: PauseEvent,
+
+    consumerClosed?: ProducerId,
+    producerClosed?: ProducerId,
+
+    consumerTransportClosed?: unknown,
+    producerTransportClosed?: unknown,
+}
+
+type Response = {
+    id: RequestId;
+    error: string,
+} | {
+    id: RequestId;
+    result: Result | void,
+}
+
+export type WebRtcTransportResult = {
+    id: string,
+    iceCandidates: MediaSoup.IceCandidate[],
+    iceParameters: MediaSoup.IceParameters,
+    dtlsParameters: MediaSoup.DtlsParameters,
+    sctpParameters?: MediaSoup.SctpParameters,
+}
+
+export type Result = {
+    routerRtpCapabilities?: MediaSoup.RtpCapabilities;
+
+    producerTransportCreated?: WebRtcTransportResult;
+    producerCreated?: {
+        producerId: ProducerId,
+        pausedGlobally: boolean,
+    };
+
+    consumerTransportCreated?: WebRtcTransportResult;
+    consumerCreated?: {
+        id: ConsumerId,
+        producerId: ProducerId,
+        kind: MediaSoup.MediaKind,
+        rtpParameters: MediaSoup.RtpParameters,
+    },
+}
+
+export type PauseEvent = {
+    producerId: ProducerId,
+    paused: boolean
+}
+
+export type ClientId = NewType<string, "ClientId">;
+export function newClientId(id: string) { return id as ClientId; }
+
+export type ProducerParameters = {
+    track: MediaStreamTrack,
+    encodings?: RtpEncodingParameters[],
+}
 
 export class SFU {
     private _requestId = 0;
@@ -34,150 +117,59 @@ export class SFU {
     */
     private readonly device = new Device({handlerName: process.env["WEBRTC_DEVICE_HANDLER_NAME"] as BuiltinHandlerName});
     private readonly promiseCompleter = new PromiseCompleter<Result | void, string, RequestId>();
-    private readonly ws: NetworkTransport;
+    private readonly ws: WSTransport;
+    private retryDelay = 1000;
+    private retryAttempts = 0;
+    private retryMaxAttempts = 30;
     private retryTimer?: NodeJS.Timeout;
     private readonly producerResolvers = new Map<ProducerId, {(producer:Producer):unknown}>();
-    private _producerTransport?: MediaSoup.Transport;
-    private _consumerTransport?: MediaSoup.Transport;
     private readonly producers = new Map<ProducerId, Promise<Producer>>();
     private readonly consumers = new Map<ProducerId, Promise<Consumer>>();
     public emitter = new EventEmitter<SfuEventMap>();
-    private readonly producerTransportLock = withTimeout(new Mutex(new Error("ProducerTransportLock")), MUTEX_TIMEOUT, new Error("ProducerTransportLock"));
-    private readonly consumerTransportLock = withTimeout(new Mutex(new Error("ConsumerTransportLock")), MUTEX_TIMEOUT, new Error("ConsumerTransportLock"));
-    private readonly createTrackLock = withTimeout(new Mutex(new Error("CreateTrackLock")), MUTEX_TIMEOUT, new Error("CreateTrackLock"));
-    private readonly pauseLocks = new Map<ProducerId, MutexInterface>();
+
+    public onTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.on(id, () => f(id)); };
+    public offTrackUpdate = (id: ProducerId, f: {(id: ProducerId):unknown}) => { this.trackUpdateEmitter.off(id, () => f(id)); };
     private trackUpdateEmitter = new EventEmitter<Record<ProducerId,[]>>();
-
-    public trackStates = new Map<ProducerId, DerivedTrackState>();
-    public updateTrackState(producerId: ProducerId, stateChange: Partial<TrackState>) {
-        function deriveState(state: TrackState): DerivedTrackState {
-            const isActiveLocally = state.isPausedLocally === false;
-            const isActiveAtProducer = state.isPausedAtSource === false;
-            const isActiveGlobally = isActiveAtProducer && state.isPausedGlobally === false;
-            return {
-                ...state,
-                isConsumable: isActiveGlobally && isActiveLocally,
-            };
-        }
-        const initialState = {
-            producerId: producerId,
-            isPausedLocally: false,
-            isPausedGlobally: false,
-            isPausedAtSource: false,
-        };
-        const state = this.trackStates.get(producerId);
-        const newState = 
-            state ? 
-                deriveState(
-                { ...state, ...stateChange } as TrackState
-                ) 
-                : 
-                deriveState(
-                { ...initialState, ...stateChange } as TrackState
-                );
-        this.trackStates.set(producerId, newState);
-        this.emitUpdateTrackStateEvent();
-        return this.trackStates;
-    }
-
-    public emitUpdateTrackStateEvent() {
-        this.emitter.emit("trackStatesUpdate", Array.from(this.trackStates.values()));
-    }
 
     public constructor(
         public readonly id: SfuId,
         public readonly url: string,
-        private readonly room: Room,
-        private retryDelay = 1000,
-        private retryAttempts = 0,
-        private retryMaxAttempts = 10,
     ) {
-        this.ws = new NetworkTransport(
+        this.ws = new WSTransport(
             url,
+            (_, d) => this.onTransportMessage(d),
+            t => this.onTransportStateChange(t),
             ["live-sfu"],
             true,
             null,
         );
-        this.ws.on("statechange", (s) => this.onTransportStateChange(s));
-        this.ws.on("message", (d) => this.onTransportMessage(d));
         this.ws.connect().catch(e => console.error(e));
-        this.room.on("trackRemoved", async (id) => {
-            const consumer = await this.consumers.get(id);
-            consumer?.close();
-            this.consumers.delete(id);
-        });
-    }
-
-    public onTrackUpdate(id: ProducerId, f: {(id: ProducerId):unknown}) {
-        this.trackUpdateEmitter.on(id, () => f(id));
-    }
-    public offTrackUpdate(id: ProducerId, f: {(id: ProducerId):unknown}) {
-        this.trackUpdateEmitter.off(id, () => f(id));
     }
 
     private generateRequestId() { return `${this._requestId++}` as RequestId; }
 
     public async getTrack(producerId: ProducerId) {
-        try {
-            const producer = await this.getProducer(producerId);
-            if (producer) return producer;
-
-            const consumer = await this.getConsumer(producerId);
-            if(consumer) { return consumer; }
-
-            return await this.consumeTrack(producerId);
-        } catch (e) {
-            console.error(`Failed to getTrack(${producerId}): `, e);
-        }
-        return;
-    }
-
-    @SFU.waitForCreateTrackLock()
-    private async getProducer(producerId: ProducerId) {
         const producer = this.producers.get(producerId);
-        if (producer) {
-            return await producer;
-        }
-        return;
-    }
+        if(producer) { return producer; }
 
-    @SFU.waitForCreateTrackLock()
-    private async getConsumer(producerId: ProducerId) {
         const consumer = this.consumers.get(producerId);
-        if (consumer) {
-            return await consumer;
-        }
-        return;
+        if(consumer) { return consumer; }
+
+        return await this.consumeTrack(producerId);
     }
 
     public async produceTrack(
-        parameters: ProducerParameters,
+        getParameters: () => Promise<ProducerParameters>,
         name: string,
         sessionId?: string,
     ) {
-        const producerTransport = await this.producerTransport();
-        const producer = await this.createProducer(parameters, name, producerTransport, sessionId);
+        const producer = await this.createProducer(getParameters, name, sessionId,);
         await this.pause(producer.id, false);
         return producer;
     }
 
-    @SFU.createTrackLock()
     public async consumeTrack(producerId: ProducerId) {
-        if (this.producers.has(producerId) || this.producerResolvers.has(producerId)) {
-            console.error(`Cannot consume track ${producerId} because it is locally produced`);
-            return;
-        }
-        if (this.consumers.has(producerId)) {
-            return this.consumers.get(producerId);
-        }
-        if (this.pauseLocks.has(producerId)) {
-            console.error(`Cannot create consumer for Track(${producerId}), it is already being created`);
-            return;
-        }
-
-        this.pauseLocks.set(producerId, withTimeout(new Mutex(new Error(`PauseLock: ${producerId}`)), MUTEX_TIMEOUT, new Error(`PauseLock: ${producerId}`)));
-
-        console.log(`Consuming track ${producerId}`);
+        if(this.producers.has(producerId)) { throw new Error(`Can not create consumer for Track(${producerId})`); }
         const consumerPromise = this.createConsumer(producerId);
         this.consumers.set(producerId, consumerPromise);
         this.trackUpdateEmitter.emit(producerId);
@@ -191,11 +183,13 @@ export class SFU {
     public async close() {
         console.log(`Closing SFU ${this.id}`);
         this.ws.disconnect();
+        this.clearRetries();
         const promises = [
             ...this.producers.values(),
             ...this.consumers.values(),
         ].map(async p => (await p).close());
         await Promise.allSettled(promises);
+
     }
 
     private clearRetries() {
@@ -206,20 +200,16 @@ export class SFU {
         }
     }
 
-    @SFU.createTrackLock()
-    @SFU.producerTransportLock()
     private async createProducer(
-        parameters: ProducerParameters,
+        getParameters: () => Promise<ProducerParameters>,
         name: string,
-        producerTransport: MediaSoup.Transport,
         sessionId?: string,
     ) {
-        // Ensure we do not try to consume any other tracks before this completes
-        const {track, encodings} = parameters;
+        const producerTransport = await this.producerTransport();
+
+        const { track, encodings } = await getParameters();
         const canProduce = this.device.canProduce(track.kind as MediaSoup.MediaKind);
-        if (!canProduce) {
-            console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`);
-        }
+        if (!canProduce) { console.warn(`It seems like the remote router is not ready or can not receive '${track.kind}' tracks`); }
 
         const mediaSoupProducer = await producerTransport.produce({
             track,
@@ -232,45 +222,20 @@ export class SFU {
                 sessionId,
             },
         });
-        console.log(`Created producer ${mediaSoupProducer.id}`);
-        return this.createAndRegisterProducer(newProducerID(mediaSoupProducer.id), mediaSoupProducer, parameters, producerTransport);
-    }
-
-    @SFU.pauseLock()
-    private createAndRegisterProducer(_id: ProducerId, mediaSoupProducer: MediaSoup.Producer, parameters: ProducerParameters, producerTransport: MediaSoup.Transport) {
         const producer: Producer = new Producer(
             mediaSoupProducer,
-            parameters,
-            producerTransport
+            getParameters,
+            (paused: boolean) => this.pause(producer.id, paused),
+            (paused: boolean) => this.pauseGlobally(producer.id, paused),
         );
-
-        producer.on("pausedLocally", async (paused) => {
-            if (paused !== undefined) await this.pause(producer.id, paused);
-        });
-        producer.on("pausedAtSource", async (paused) => {
-            if (paused !== undefined) await this.pause(producer.id, paused);
-        });
-        producer.on("pausedGlobally", async (paused) => {
-            if (paused !== undefined) await this.pauseGlobally(producer.id, paused);
-        });
-        producer.on("close", () => {
-            this.producers.delete(producer.id);
-            this.pauseLocks.delete(producer.id);
-        });
-
-        this.resolveProducer(producer);
-        this.updateTrackState(producer.id, producer.state);
-        return producer;
-    }
-
-    private resolveProducer(producer: Producer) {
         const resolver = this.producerResolvers.get(producer.id);
-        if (resolver) {
+        if(resolver) {
             this.producerResolvers.delete(producer.id);
             resolver(producer);
-            return;
+        } else {
+            console.error(`Could not locate resolver while creating Producer(${producer.id})`);
         }
-        return console.error(`Could not locate resolver while creating Producer(${producer.id})`);
+        return producer;
     }
 
     private async createConsumer(producerId: ProducerId) {
@@ -280,60 +245,24 @@ export class SFU {
         if (!response) { throw new Error(`Received empty response from SFU when trying to consume producerId(${producerId})`); }
         if (!response.consumerCreated) { throw new Error(`Received response without consumer parameters from SFU when trying to consume producerId(${producerId})`); }
         console.log(response);
-        const mediasoupConsumer = await consumerTransport.consume(response.consumerCreated);
+        const consumer = await consumerTransport.consume(response.consumerCreated);
         await this.pause(producerId, false);
-        const consumer =  new Consumer(
-            mediasoupConsumer,
-            consumerTransport
+        return new Consumer(
+            consumer,
+            (paused: boolean) => this.pause(producerId, paused),
+            (paused: boolean) => this.pauseGlobally(producerId, paused),
         );
-        consumer.on("pausedLocally", (paused) => {
-            if (paused !== undefined) this.pause(producerId, paused);
-        });
-        consumer.on("pausedAtSource", (paused) => {
-            if (paused !== undefined) this.pause(producerId, paused);
-        });
-        consumer.on("pausedGlobally", (paused) => {
-            if (paused !== undefined) this.pauseGlobally(producerId, paused);
-        });
-        consumer.on("close", () => {
-            this.consumers.delete(producerId);
-            this.pauseLocks.delete(producerId);
-        });
-        this.updateTrackState(consumer.id, consumer.state);
-        return consumer;
     }
 
-    @SFU.pauseLock()
-    public async pauseGlobally(id: ProducerId, paused: boolean, skipUpdateState = false) {
-        if (!skipUpdateState) {
-            this.updateTrackState(id, { isPausedGlobally: paused });
-        }
+    public async pauseGlobally(id: ProducerId, paused: boolean) {
         return await this.request({pauseForEveryone: {id, paused}});
     }
 
-    @SFU.pauseLock()
-    public async pause(id: ProducerId, paused: boolean, skipUpdateState = false) {
-        if (!skipUpdateState) {
-            this.updateTrackState(id, { isPausedLocally: paused });
-        }
+    public async pause(id: ProducerId, paused: boolean) {
         return await this.request({pause: {id, paused}});
     }
 
-    @SFU.consumerTransportLock()
-    private async consumerTransport() {
-        // Check transport status, return existing transport if it's ok
-        if ((this._consumerTransport && this._consumerTransport.connectionState === "connected") ||
-                    (this._consumerTransport && this._consumerTransport.connectionState === "connecting") ||
-                    (this._consumerTransport && this._consumerTransport.connectionState === "new")) {
-            return this._consumerTransport;
-        }
-        // Transport state not ok, create new consumer transport
-        const transport = await this.createConsumerTransport();
-        this._consumerTransport = transport;
-        return transport;
-    }
-
-    private async createConsumerTransport() {
+    private consumerTransport = Memoize(async () => {
         await this.loadDevice();
         const response = await this.request({ createConsumerTransport: {} });
         if (!response) { throw new Error("Empty response from SFU"); }
@@ -343,23 +272,9 @@ export class SFU {
         const transport = this.device.createRecvTransport(consumerTransportCreated);
         transport.on("connect", ({ dtlsParameters }, success, error) => this.request({ connectConsumerTransport: { dtlsParameters } }).then(success, error));
         return transport;
-    }
+    });
 
-    @SFU.producerTransportLock()
-    private async producerTransport() {
-        // Check transport status, return existing transport if it's ok
-        if ((this._producerTransport && this._producerTransport.connectionState === "connected") ||
-            (this._producerTransport && this._producerTransport.connectionState === "connecting") ||
-            (this._producerTransport && this._producerTransport.connectionState === "new")) {
-            return this._producerTransport;
-        }
-        // Transport state not ok, create new producer transport
-        const transport = await this.createProducerTransport();
-        this._producerTransport = transport;
-        return transport;
-    }
-
-    private async createProducerTransport() {
+    private producerTransport = Memoize(async () => {
         await this.loadDevice();
         const result = await this.request({ createProducerTransport: {} });
         if (!result) { throw new Error("Empty response from SFU"); }
@@ -369,37 +284,25 @@ export class SFU {
         const transport = this.device.createSendTransport(producerTransportCreated);
         transport.on("connect", (connectProducerTransport, callback, error) => this.request({ connectProducerTransport }).then(callback, error));
         transport.on("produce", async (produceTrack, callback, error) => {
-            return await this.onProduce(produceTrack, error, callback);
+            try {
+                const response = await this.request({ produceTrack });
+                if(!response) { return error("No response from SFU"); }
+                const { producerCreated } = response;
+                if(!producerCreated) { return error("Empty response from SFU"); }
+                const id = producerCreated.producerId;
+                if(!id) { return error("Malformed response from SFU"); }
+                const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
+                this.producers.set(id, producerPromise);
+                this.trackUpdateEmitter.emit(id);
+                producerPromise.then(p => p.pausedGlobally = producerCreated.pausedGlobally);
+                callback({id});
+            } catch(e) {
+                error(e);
+            }
         });
         return transport;
-    }
+    });
 
-    private async onProduce(produceTrack: ProduceTrackRequest | undefined, error: (...args: unknown[]) => unknown, callback: (...args: unknown[]) => unknown) {
-        try {
-            const response = await this.request({produceTrack});
-            if (!response) {
-                return error("No response from SFU");
-            }
-            const {producerCreated} = response;
-            if (!producerCreated) {
-                return error("Empty response from SFU");
-            }
-            const id = producerCreated.producerId;
-            if (!id) {
-                return error("Malformed response from SFU");
-            }
-            const producerPromise = new Promise<Producer>(resolver => this.producerResolvers.set(id, resolver));
-            this.producers.set(id, producerPromise);
-            console.log(`NumProducers: ${this.producers.size}`);
-            if (!this.pauseLocks.has(id)) this.pauseLocks.set(id, withTimeout(new Mutex(new Error(`PauseLock: ${id}`)), MUTEX_TIMEOUT, new Error(`PauseLock: ${id}`)));
-
-            this.trackUpdateEmitter.emit(id);
-            producerPromise.then(p => p.pausedGlobally = producerCreated.pausedGlobally);
-            callback({id});
-        } catch (e) {
-            error(e);
-        }
-    }
 
     private sendRtpCapabilities = Memoize(async () => {
         await this.request({ setRtpCapabilities: this.device.rtpCapabilities });
@@ -421,23 +324,20 @@ export class SFU {
         return this.promiseCompleter.createPromise(id);
     }
 
-    private retry() {
-        if (this.retryAttempts > this.retryMaxAttempts) {
-            console.log("Max retry attempts reached");
-            return;
-        }
-        console.log(`id: ${this.id} retries: ${this.retryAttempts}/${this.retryMaxAttempts}`);
-        this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.hasProducers));
-        this.retryAttempts++;
-
-        this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
-    }
-
-    private onTransportStateChange(state: NetworkTransportState) {
+    private onTransportStateChange(state: TransportState) {
         switch (state) {
         case "error":
             console.info(`Transport state changed to ${state}`);
-            this.retry();
+            this.retryAttempts++;
+            if (this.retryAttempts < this.retryMaxAttempts) {
+                console.log(`id: ${this.id} retries: ${this.retryAttempts}/${this.retryMaxAttempts}`);
+                this.emitter.emit("connectionError", new SfuConnectionError("Transport error", this.retryAttempts, this.id, this.hasProducers));
+                this.waitRetry().then(() => this.ws.connect().catch(e => console.error(e)));
+            }
+            else {
+                this.clearRetries();
+                console.log("Max retry attempts reached, closing connection");
+            }
             break;
         case "connected":
             console.info(`Transport state changed to ${state}`);
@@ -450,12 +350,12 @@ export class SFU {
 
     private async waitRetry() {
         if (this.retryAttempts < 10) {
-            return await new Promise(resolve => this.retryTimer = setTimeout(resolve, this.retryDelay));
+            await new Promise(resolve => this.retryTimer = setTimeout(resolve, this.retryDelay));
+        } else if (this.retryAttempts < 20) {
+            await new Promise(resolve => this.retryTimer = setTimeout(resolve, 3 * this.retryDelay));
+        } else {
+            await new Promise(resolve => this.retryTimer = setTimeout(resolve, 5 * this.retryDelay));
         }
-        if (this.retryAttempts < 20) {
-            return await new Promise(resolve => this.retryTimer = setTimeout(resolve, 3 * this.retryDelay));
-        }
-        return await new Promise(resolve => this.retryTimer = setTimeout(resolve, 5 * this.retryDelay));
     }
 
     private onTransportMessage(data: string | ArrayBuffer | Blob) {
@@ -501,21 +401,18 @@ export class SFU {
     private response(response: Response) {
         const { id } = response;
         if ("error" in response) {
-            return this.promiseCompleter.reject(id, response.error);
+            this.promiseCompleter.reject(id, response.error);
+        } else {
+            this.promiseCompleter.resolve(id, response.result);
         }
-        return this.promiseCompleter.resolve(id, response.result);
     }
 
     private async closeTrack(producerId: ProducerId) {
-        console.log(`Producer(${producerId}): track closed`);
         (await this.producers.get(producerId))?.close();
         this.producers.delete(producerId);
 
         (await this.consumers.get(producerId))?.close();
         this.consumers.delete(producerId);
-
-        this.trackStates.delete(producerId);
-        this.emitUpdateTrackStateEvent();
     }
 
     private async onSourcePaused({ producerId, paused }: PauseEvent) {
@@ -524,109 +421,55 @@ export class SFU {
         if(consumer) {
             consumer.pausedAtSource = paused;
             paused ? await consumer.stop() : await consumer.start();
-            this.updateTrackState(producerId, consumer.state);
         }
     }
 
     private async onGloballyPaused({ producerId, paused }: PauseEvent) {
         console.log(`Producer(${producerId}): Global pause (${producerId},${paused})`);
         const producer = await this.producers.get(producerId);
-        if(producer) { 
-            producer.pausedGlobally = paused;
-            this.updateTrackState(producerId, producer.state);
-        }
+        if(producer) { producer.pausedGlobally = paused; }
 
         const consumer = await this.consumers.get(producerId);
-        if(consumer) {
-            consumer.pausedGlobally = paused;
-            this.updateTrackState(producerId, consumer.state);
-        }
+        if(consumer) { consumer.pausedGlobally = paused; }
     }
+}
 
-    // Decorators
-    /// Decorator for ensuring that only one track is being created at a time.  Mostly to prevent a consumer being created as its local producer is being created.  Use via @SFU.createTrackLock().
-    private static createTrackLock() {
-        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-            const childFunction = descriptor.value;
-            descriptor.value = function (this: SFU, ...args: never[]) {
-                try {
-                    return this.createTrackLock.runExclusive(async () => {
-                        printIfDebugLocksEnabled("Acquire CreateTrackLock");
-                        return childFunction.apply(this, args);
-                    });
-                } finally {
-                    printIfDebugLocksEnabled("Release CreateTrackLock");
-                }
-            };
-            return descriptor;
-        };
-    }
+type SfuAuthError = Error & {
+    code: number;
+}
 
-    /// Decorator for waiting for the createTrackLock to finish rather than acquiring it.  Use via @SFU.waitForCreateTrackLock().
-    private static waitForCreateTrackLock() {
-        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-            const childFunction = descriptor.value;
-            descriptor.value = async function (this: SFU, ...args: never[]) {
-                await this.createTrackLock.waitForUnlock();
-                return childFunction.apply(this, args);
-            };
-            return descriptor;
-        };
-    }
+export type AuthenticationError = SfuAuthError & {
+    name: "AuthenticationError";
+};
 
-    /// Decorator for ensuring that the producer transport is not being changed or used to produce another track.  Use via @SFU.producerTransportLock().
-    private static producerTransportLock() {
-        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-            const childFunction = descriptor.value;
-            descriptor.value = function (this: SFU, ...args: never[]) {
-                try {
-                    return this.producerTransportLock.runExclusive(async () => {
-                        printIfDebugLocksEnabled("Acquire ProducerTransportLock");
-                        return childFunction.apply(this, args);
-                    });
-                } finally {
-                    printIfDebugLocksEnabled("Release ProducerTransportLock");
-                }
-            };
-            return descriptor;
-        };
-    }
+export type AuthorizationError = SfuAuthError & {
+    name: "AuthorizationError";
+};
 
-    /// Decorator for ensuring that the consumer transport is not being changed or used to consume another track.  Use via @SFU.consumerTransportLock().
-    private static consumerTransportLock() {
-        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-            const childFunction = descriptor.value;
-            descriptor.value = function (this: SFU, ...args: never[]) {
-                try {
-                    return this.consumerTransportLock.runExclusive(async () => {
-                        printIfDebugLocksEnabled("Acquire ConsumerTransportLock");
-                        return childFunction.apply(this, args);
-                    });
-                } finally {
-                    printIfDebugLocksEnabled("Release ConsumerTransportLock");
-                }
-            };
-            return descriptor;
-        };
+export type TokenMismatchError = SfuAuthError & {
+    name: "TokenMismatchError";
+};
 
-    }
+export type MissingAuthenticationError = SfuAuthError & {
+    name: "MissingAuthenticationError";
+};
 
-    /// Decorator for ensuring that the track is not being paused at the same time.  Use via @SFU.pauseLock().
-    private static pauseLock() {
-        return (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-            const childFunction = descriptor.value;
-            descriptor.value = function (this: SFU, ...args: any[]) {
-                const id: ProducerId = args[0];
-                try {
-                    return this.pauseLocks.get(id)?.runExclusive(async () => {
-                        printIfDebugLocksEnabled("Acquire PauseLock");
-                        return childFunction.apply(this, args);
-                    });
-                } finally {
-                    printIfDebugLocksEnabled("Release PauseLock");
-                }
-            };
-            return descriptor;
-        };
-    }
+export type MissingAuthorizationError = SfuAuthError & {
+    name: "MissingAuthorizationError";
+};
+
+export type SfuAuthErrors = AuthenticationError | AuthorizationError | TokenMismatchError | MissingAuthenticationError | MissingAuthorizationError;
+
+export class SfuConnectionError implements Error {
+    public readonly name = "SfuConnectionError";
+    constructor(
+        public readonly message: string,
+        public readonly retries: number,
+        public readonly id: SfuId,
+        public readonly producerError: boolean = false) {}
+}
+
+export type SfuEventMap = {
+    authError: (error: SfuAuthErrors) => void,
+    connectionError: (error: SfuConnectionError) => void,
 }

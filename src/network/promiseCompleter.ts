@@ -35,7 +35,7 @@ export class PromiseCompleter<
     private useCallbacks(requestId: PromiseId) {
         const completer = this.callbacks.get(requestId);
         if (!completer) {
-            throw new Error(`Received response for unknown requestID(${requestId})`);
+            throw new Error(`Recieved response for unknown requestID(${requestId})`);
         }
         this.callbacks.delete(requestId);
         return completer;

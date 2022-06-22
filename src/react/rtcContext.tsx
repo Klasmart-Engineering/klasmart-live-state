@@ -1,128 +1,33 @@
 import React from "react";
-import {TrackSender} from "../network/trackSender";
-import {
-    SfuId,
-    SfuAuthErrors,
-    SfuConnectionError,
-    AuthorizationError,
-    AuthenticationError,
-    MissingAuthenticationError, TokenMismatchError, MissingAuthorizationError, DerivedTrackState
-} from "../network/sfuTypes";
-import {SFU} from "../network/sfu";
+import { TrackSender } from "../network/trackSender";
+import {SFU, SfuId, SfuAuthErrors, SfuConnectionError} from "../network/sfu";
 import {Room, TrackLocation} from "../network/room";
-import EventEmitter from "eventemitter3";
-import {deferred} from "../deferred";
 
-enum SfuAuthErrorCodes {
-    INVALID = 4400,
-    EXPIRED = 4401,
-    NOT_BEFORE = 4403,
-    UNKNOWN_ERROR = 4500
-}
-
-export type WebRtcManagerEventMap = {
-    tokenMismatchError: (error: TokenMismatchError) => void;
-    authenticationMissingError: (error: MissingAuthenticationError) => void;
-    authorizationMissingError: (error: MissingAuthorizationError) => void;
-    authorizationInvalidError: (error: AuthorizationError) => void;
-    authorizationExpiredError: (error: AuthorizationError) => void;
-    authenticationInvalidError: (error: AuthenticationError) => void;
-    authenticationExpiredError: (error: AuthenticationError) => void;
-    unknownError: (error: Error) => void;
-};
-
-export type SenderType = "microphone" | "camera" | "screenshare-video";
 
 export class WebRtcManager {
-    private maxSfuRetries = 10;
-    public readonly room: Room;
     public microphoneConstraints?: MediaStreamConstraints["audio"];
-    private microphone?: TrackSender;
-    private camera?: TrackSender;
-    private screenshare?: TrackSender;
+    public readonly microphone = new TrackSender(
+        () => this.selectProducerSfu(),
+        microphoneGetter(() => this.microphoneConstraints),
+        "microphone",
+        this.sessionId,
+    );
+
     public cameraConstraints?: MediaStreamConstraints["video"];
+    public readonly camera = new TrackSender(
+        () => this.selectProducerSfu(),
+        cameraGetter(() => this.cameraConstraints),
+        "camera",
+        this.sessionId,
+    );
+
     public screenshareConstraints?: DisplayMediaStreamConstraints;
-    private emitter = new EventEmitter<WebRtcManagerEventMap>();
-
-    public readonly on: EventEmitter<WebRtcManagerEventMap>["on"] = (event, listener) => this.emitter.on(event, listener);
-    public readonly once: EventEmitter<WebRtcManagerEventMap>["once"] = (event, listener) => this.emitter.once(event, listener);
-    public readonly off: EventEmitter<WebRtcManagerEventMap>["off"] = (event, listener) => this.emitter.off(event, listener);
-
-    public constructor(
-        public readonly baseEndpoint: URL,
-        public readonly sessionId?: string,
-    ) {
-        if(baseEndpoint.protocol === "https:") { baseEndpoint.protocol = "wss:"; }
-        if(baseEndpoint.protocol === "http:") { baseEndpoint.protocol = "ws:"; }
-        const wsEndpoint = new URL(baseEndpoint.toString());
-        wsEndpoint.pathname += "room";
-        this.room = new Room(wsEndpoint.toString());
-    }
-
-    private createSender(senderType: SenderType, track: Promise<MediaStreamTrack>) {
-        const sender = new TrackSender(
-            senderType,
-            track,
-            this.selectProducerSfu(),
-            this.sessionId
-        );
-        sender.on("statechange", (state) => {
-            console.log(`${senderType} sender state: ${state}`);
-        });
-        return sender;
-    }
-
-    public getCamera(): TrackSender {
-        if (!this.camera) {
-            const { resolve, promise: track } = deferred<MediaStreamTrack>();
-            this.camera = this.createSender("camera", track);
-            this.camera.on("waitForTrack", async () => {
-                resolve(await cameraGetter(this.cameraConstraints));
-            });
-            this.camera.on("statechange", async (state) => {
-                if (state === "close" || state === "new" || state === "switching-sfu") {
-                    await this.camera?.creating();
-                }
-            });
-        }
-        return this.camera;
-    }
-
-    public getMicrophone(): TrackSender {
-        if (!this.microphone) {
-            const { resolve, promise: track } = deferred<MediaStreamTrack>();
-            this.microphone = this.createSender("microphone", track);
-            this.microphone.on("waitForTrack", async () => {
-                resolve(await microphoneGetter(this.microphoneConstraints));
-            });
-            this.microphone.on("statechange", (state) => {
-                if (state === "close" || state === "new" || state === "switching-sfu")
-                    this.microphone?.creating();
-            });
-        }
-        return this.microphone;
-    }
-
-    public getScreenshare(): TrackSender {
-        if (!this.screenshare) {
-            const { resolve, promise: track } = deferred<MediaStreamTrack>();
-            this.screenshare = this.createSender("screenshare-video", track);
-            this.screenshare.on("waitForTrack", async () => {
-                resolve(await screenshareGetter(this.screenshareConstraints));
-            });
-            this.screenshare.on("statechange", async (state) => {
-                if (state === "switching-sfu" || state === "new") {
-                    return this.screenshare?.creating();
-                }
-                if (state === "not-sending") {
-                    this.screenshare?.close();
-                    this.screenshare = undefined;
-                    return;
-                }
-            });
-        }
-        return this.screenshare;
-    }
+    public readonly screenshare = new TrackSender(
+        () => this.selectProducerSfu(),
+        screenshareGetter(() => this.screenshareConstraints),
+        "screenshare-video",
+        this.sessionId,
+    );
 
     public async pauseForEveryone({sfuId, producerId}: TrackLocation, paused: boolean) {
         const sfu = this.sfus.get(sfuId);
@@ -143,112 +48,141 @@ export class WebRtcManager {
         );
     }
 
+    public readonly room: Room;
+
+    public constructor(
+        public readonly baseEndpoint: URL,
+        public readonly sessionId?: string,
+        private onAuthorizationInvalid?: () => unknown,
+        private onAuthorizationExpired?: () => unknown,
+        private onAuthenticationExpired?: () => unknown,
+        private onAuthenticationInvalid?: () => unknown,
+        private onTokenMismatch?: () => unknown,
+        private onMissingAuthenticationToken?: () => unknown,
+        private onMissingAuthorizationToken?: () => unknown
+    ) {
+        if(baseEndpoint.protocol === "https:") { baseEndpoint.protocol = "wss:"; }
+        if(baseEndpoint.protocol === "http:") { baseEndpoint.protocol = "ws:"; }
+        const wsEndpoint = new URL(baseEndpoint.toString());
+        wsEndpoint.pathname += "room";
+        this.room = new Room(wsEndpoint.toString());
+    }
+
     private async onSfuConnectionError(error: SfuConnectionError) {
-        if (error.retries < this.maxSfuRetries || !this.sfus.has(error.id)) {
+        if (error.retries < 10 || !this.sfus.has(error.id)) {
             return;
         }
         try {
             if (error.producerError) {
                 console.error(`Cannot seem to reliably connect to SFU(${error.id}), attempting to acquire a different sfu`);
-                const sfu = await this.selectProducerSfu(error.id);
+                await this.selectProducerSfu(error.id);
                 const promises = [
                     this.camera,
                     this.microphone,
                     this.screenshare,
                 ].flatMap(sender => {
-                    if(!sender || sender.sfuId !== error.id) { return []; }
-                    return sender.switchSfu(sfu);
+                    if(sender.sfuId !== error.id) { return []; }
+                    return sender.changeState("switching-sfu");
                 });
                 await Promise.allSettled(promises);
             }
 
-            await this.removeSfu(error.id);
-        }
-        catch (e) {
+            const sfu = this.sfus.get(error.id);
+            await sfu?.close();
+            this.sfus.delete(error.id);
+            await this.room.removeSfuId(error.id);
+        } catch (e) {
             console.error(e);
         }
     }
 
-    private async removeSfu(id: SfuId) {
-        const sfu = this.sfus.get(id);
-        await sfu?.close();
-        this.sfus.delete(id);
-        await this.room.removeSfuId(id);
-    }
-
     private onSfuAuthError(error: SfuAuthErrors) {
         console.error(error.name);
+        enum SfuAuthErrorCodes {
+            INVALID = 4400,
+            EXPIRED = 4401,
+            NOT_BEFORE = 4403,
+            UNKNOWN_ERROR = 4500
+        }
+
         switch (error.name) {
         case "AuthenticationError":
-            this.onAuthenticationError(error);
+            switch (error.code){
+            case SfuAuthErrorCodes.INVALID:
+                if (this.onAuthenticationInvalid) {
+                    this.onAuthenticationInvalid();
+                } else {
+                    console.error("INVALID_AUTHENTICATION not handled");
+                }
+                break;
+            case SfuAuthErrorCodes.EXPIRED:
+                if (this.onAuthenticationExpired) {
+                    this.onAuthenticationExpired();
+                } else {
+                    console.error("EXPIRED_AUTHENTICATION not handled");
+                }
+                break;
+            case SfuAuthErrorCodes.NOT_BEFORE:
+            case SfuAuthErrorCodes.UNKNOWN_ERROR:
+            default:
+                console.error(JSON.stringify(error));
+            }
             break;
         case "AuthorizationError":
-            this.onAuthorizationError(error);
+            switch (error.code){
+            case SfuAuthErrorCodes.INVALID:
+                if (this.onAuthorizationInvalid) {
+                    this.onAuthorizationInvalid();
+                } else {
+                    console.error("INVALID_AUTHORIZATION not handled");
+                }
+                break;
+            case SfuAuthErrorCodes.EXPIRED:
+                if (this.onAuthorizationExpired) {
+                    this.onAuthorizationExpired();
+                } else {
+                    console.error("EXPIRED_AUTHORIZATION not handled");
+                }
+                break;
+            case SfuAuthErrorCodes.NOT_BEFORE:
+            case SfuAuthErrorCodes.UNKNOWN_ERROR:
+            default:
+                console.error(JSON.stringify(error));
+            }
             break;
         case "TokenMismatchError":
-            this.emitter.emit("tokenMismatchError", error);
+            if (this.onTokenMismatch) {
+                this.onTokenMismatch();
+            } else {
+                console.error("TOKEN_MISMATCH not handled");
+            }
             break;
         case "MissingAuthenticationError":
-            this.emitter.emit("authenticationMissingError", error);
+            if (this.onMissingAuthenticationToken) {
+                this.onMissingAuthenticationToken();
+            } else {
+                console.error("MISSING_AUTHENTICATION_ERROR not handled");
+            }
             break;
         case "MissingAuthorizationError":
-            this.emitter.emit("authorizationMissingError", error);
+            if (this.onMissingAuthorizationToken) {
+                this.onMissingAuthorizationToken();
+            } else {
+                console.error("MISSING_AUTHORIZATION_ERROR not handled");
+            }
             break;
         default:
-            this.emitter.emit("unknownError", error);
-        }
-    }
-
-    private onAuthorizationError(error: AuthorizationError) {
-        switch (error.code) {
-        case SfuAuthErrorCodes.INVALID:
-            this.emitter.emit("authorizationInvalidError", error);
-            break;
-        case SfuAuthErrorCodes.EXPIRED:
-            this.emitter.emit("authorizationExpiredError", error);
-            break;
-        case SfuAuthErrorCodes.NOT_BEFORE:
-        case SfuAuthErrorCodes.UNKNOWN_ERROR:
-        default:
-            this.emitter.emit("unknownError", error);
-        }
-    }
-
-    private onAuthenticationError(error: AuthenticationError) {
-        switch (error.code) {
-        case SfuAuthErrorCodes.INVALID:
-            this.emitter.emit("authenticationInvalidError", error);
-            break;
-        case SfuAuthErrorCodes.EXPIRED:
-            this.emitter.emit("authenticationExpiredError", error);
-            break;
-        case SfuAuthErrorCodes.NOT_BEFORE:
-        case SfuAuthErrorCodes.UNKNOWN_ERROR:
-        default:
-            this.emitter.emit("unknownError", error);
+            console.error(JSON.stringify(error));
         }
     }
 
     private readonly sfus = new Map<SfuId, SFU>();
-    public get sfuIdsHash() {
-        return Array.from(this.sfus.keys()).sort().join(",");
-    }
-    public subscribeToSfuTrackStateUpdates(callback: (state: DerivedTrackState[]) => void) {
-        for (const sfu of this.sfus.values()) {
-            sfu.emitter.on("trackStatesUpdate", callback);
-        }
-    }
-    public unsubscribeToSfuTrackStateUpdates(callback: (state: DerivedTrackState[]) => void) {
-        for (const sfu of this.sfus.values()) {
-            sfu.emitter.off("trackStatesUpdate", callback);
-        }
-    }
 
     public sfu(id: SfuId) {
         let sfu = this.sfus.get(id);
         if (!sfu) {
             const url = this.getSfuUrl(id);
-            sfu = new SFU(id, url, this.room);
+            sfu = new SFU(id, url);
             sfu.emitter.on("authError", (err) => this.onSfuAuthError(err));
             sfu.emitter.on("connectionError", (err) => this.onSfuConnectionError(err));
             this.sfus.set(id, sfu);
@@ -266,52 +200,38 @@ export class WebRtcManager {
         wsEndpoint.pathname += `sfuid/${id}`;
         return wsEndpoint.toString();
     }
-
-    public getAllSfuTrackStates() {
-        return Array.from(this.sfus.values()).flatMap((sfu) => {
-            return Array.from(sfu.trackStates.values());
-        });
-    }
 }
 
-export function audioTrack(stream: MediaStream) {
-    return firstTrack(stream.getAudioTracks());
-}
-export function videoTrack(stream: MediaStream) {
-    return firstTrack(stream.getVideoTracks());
-}
-export function firstTrack(tracks: MediaStreamTrack[]) {
+const microphoneGetter = (
+    getAudioConstraints?: () => MediaStreamConstraints["audio"]
+) => () => audioTrack(
+    navigator.mediaDevices.getUserMedia({
+        audio: getAudioConstraints?.() || true,
+    })
+);
+
+const cameraGetter = (
+    getVideoConstraints?: () => MediaStreamConstraints["video"]
+) => () => videoTrack(
+    navigator.mediaDevices.getUserMedia({
+        video: getVideoConstraints?.() || true,
+    })
+);
+
+const screenshareGetter = (
+    getConstraints?: () =>  DisplayMediaStreamConstraints|undefined
+) => () => videoTrack(
+    navigator.mediaDevices.getDisplayMedia(getConstraints?.())
+);
+
+export const audioTrack = async (stream: Promise<MediaStream>) => firstTrack((await stream).getAudioTracks());
+export const videoTrack = async (stream: Promise<MediaStream>) => firstTrack((await stream).getVideoTracks());
+export const firstTrack = (tracks: MediaStreamTrack[]) => {
     const track = tracks[0];
     if(!track) { throw new Error("Could not get media track"); }
     if(tracks.length > 1) { console.info(`Got ${tracks.length} media tracks, can only use 1`); }
     return track;
-}
-
-async function microphoneGetter(
-    getAudioConstraints?: MediaStreamConstraints["audio"]
-) {
-    const stream = await navigator.mediaDevices.getUserMedia({
-        audio: getAudioConstraints || true,
-    });
-    return audioTrack(stream);
-}
-
-async function cameraGetter(
-    videoConstraints?: MediaStreamConstraints["video"]
-) {
-    const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints || true,
-    });
-    return videoTrack(stream);
-}
-
-async function screenshareGetter(
-    screenshareConstraints?: DisplayMediaStreamConstraints
-) {
-    const stream = await navigator.mediaDevices.getDisplayMedia(screenshareConstraints);
-    return videoTrack(stream);
-}
+};
 
 export const WebRtcContext = React.createContext<WebRtcManager>(null as any);
 WebRtcContext.displayName = "KidsloopLiveWebRTC";
-

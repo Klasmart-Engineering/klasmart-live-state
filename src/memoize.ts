@@ -7,8 +7,9 @@ export const Memoize = <
     Return,
 >(f: {(...args:Parameters): Return}): {(...args:Parameters): Return} => {
     let cache: {value: Return} | undefined;
-    return (...args: Parameters) => {
+    const wrapper = (...args: Parameters) => {
         if(!cache) {cache = {value: f(...args)};}
-        return cache.value;
+        return cache.value; 
     };
+    return wrapper;
 };
