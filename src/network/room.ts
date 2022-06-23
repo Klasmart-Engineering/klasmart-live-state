@@ -1,6 +1,7 @@
 import { ProducerId, SfuId } from "./sfu";
-import { TransportState, WSTransport } from "./websocketTransport";
+import { TransportState, WSTransport } from "./wsTransport";
 import EventEmitter from "eventemitter3";
+import { WebSocketTransport } from "./websocketTransport";
 
 export type TrackLocation = { sfuId: SfuId, producerId: ProducerId }
 const trackLocationEquals = (a: TrackLocation, b: TrackLocation) =>
@@ -41,6 +42,7 @@ export class Room {
         this.ws = new WSTransport(
             endpoint,
             (_, d) => this.onTransportMessage(d),
+            (url: string, protocols: string[]) => {return new WebSocketTransport(url, protocols);},
             t => this.onTransportStateChange(t),
             undefined,
             true,

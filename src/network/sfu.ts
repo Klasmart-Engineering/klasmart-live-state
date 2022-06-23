@@ -1,12 +1,13 @@
 import {Device, types as MediaSoup} from "mediasoup-client";
 import {NewType} from "../types";
-import {TransportState, WSTransport} from "./websocketTransport";
+import {TransportState, WSTransport} from "./wsTransport";
 import {PromiseCompleter} from "./promiseCompleter";
 import {Memoize} from "../memoize";
 import EventEmitter from "eventemitter3";
 import { BuiltinHandlerName } from "mediasoup-client/lib/Device";
 import {Consumer, Producer} from "./track";
 import { RtpEncodingParameters } from "mediasoup-client/lib/RtpParameters";
+import { WebSocketTransport } from "./websocketTransport";
 
 export type SfuId = NewType<string, "sfuId">
 export const newSfuID = (id: string) => id as SfuId;
@@ -25,7 +26,7 @@ export type RequestMessage = {
     request: Request,
 }
 
-type Request = {
+export type Request = {
     getRouterRtpCapabilities?: unknown;
     createProducerTransport?: unknown;
     connectProducerTransport?: TransportConnectRequest;
@@ -192,6 +193,7 @@ export class SFU {
         this.ws = new WSTransport(
             url,
             (_, d) => this.onTransportMessage(d),
+            (url: string, protocols: string[]) => {return new WebSocketTransport(url, protocols);},
             t => this.onTransportStateChange(t),
             ["live-sfu"],
             true,

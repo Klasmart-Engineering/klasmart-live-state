@@ -17,8 +17,9 @@ import {
 import { messageToClassAction } from "../protobuf/actions";
 import { EventEmitter } from "eventemitter3";
 import { setConnectionState } from "../redux/network";
-import { TransportState, WSTransport } from "./websocketTransport";
+import { TransportState, WSTransport } from "./wsTransport";
 import { PromiseCompleter } from "./promiseCompleter";
+import { WebSocketTransport } from "./websocketTransport";
 
 export type RequestID = NewType<string, "RequestID">;
 export const newRequestId = (value: string): RequestID => value as RequestID;
@@ -55,6 +56,7 @@ export class Network<ApplicationState = unknown> {
         this.transport = new WSTransport(
             url,
             (t, d) => this.onNetworkMessage(t, d),
+            (url: string, protocols: string[]) => {return new WebSocketTransport(url, protocols);},
             (s) => this.onStateChange(s),
             ["live"],
             true
